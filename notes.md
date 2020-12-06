@@ -107,6 +107,7 @@ module.exports = {
   > **☝️ NOTE: ** we've prefied our environment variables with `NEXT_PUBLIC_` which tells next.js to expose these specific keys to our client side application. 
   >
   > - ❗️ Any non-prefixed keys will only be available to our application on the server-side
+  > - **❗️NOTE:** we also need to restart our development server in order to provide our local application with our environment variables.
 
 
 
@@ -145,6 +146,14 @@ In order to use github as an authentication provider, we'll need to create a new
         <div><img src="" /></div>
   </div>
 </code></pre>
+
+> **⚠️ NOTE:** firebase may have a truncated url listed in its callback the url github requires should look like this: `https://fast-feedback-2868a.firebaseapp.com/__/auth/handler`
+
+
+
+
+
+
 
 - Once we've generated our `client id` and `client secret` from github we can use those to configure the authentication settings in firebase:
 
@@ -185,14 +194,14 @@ In order to use github as an authentication provider, we'll need to create a new
   ```js
   // lib/firebase.js
   
-  import * as firebase from "firebase/app";
-  import "firebase/auth";
+  import * as firebase from 'firebase/app';
+  import 'firebase/auth';
   
   if (!firebase.apps.length) {
     firebase.initializeApp({
-      apiKey: NEXT_PUBLIC_FIREBASE_API_KEY,
-      authDomain: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-      projectId: NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
     });
   }
   
@@ -215,7 +224,7 @@ In order to use github as an authentication provider, we'll need to create a new
   // lib/auth.js
   
   import React, { useState, useEffect, useContext, createContext } from 'react';
-  import firebase from './firebase'
+  import firebase from './firebase';
   
   const authContext = createContext();
   
@@ -237,7 +246,7 @@ In order to use github as an authentication provider, we'll need to create a new
       return firebase
         .auth()
         .signInWithPopup(new firebase.auth.GithubAuthProvider())
-        .then((res) => {
+        .then((response) => {
           setUser(response.user);
           return response.user;
         });
@@ -260,6 +269,8 @@ In order to use github as an authentication provider, we'll need to create a new
           setUser(false);
         }
       });
+  
+      return () => unsubscribe();
     }, []);
   
     return {
@@ -276,11 +287,72 @@ In order to use github as an authentication provider, we'll need to create a new
 
 ### Setup custom _app with auth provider
 
-```js
+```jsx
 // pages/_app.js
 
+import { ProvideAuth } from '../lib/auth';
 
+ function MyApp({ Component, pageProps }) {
+   return (
+     <ProvideAuth>
+       <Component {...pageProps} />
+     </ProvideAuth>
+   );
+ }
+
+ export default MyApp;
 ```
 
 > **💡** Next.js uses the `App` component to initialize pages. We've overridden it in order to wrap our application with the authentication provider. 
+
+
+
+Now we can use the consume authentication context from anywhere inside our application:
+
+```jsx
+// pages/index.js
+
+import Head from 'next/head';
+// import { auth } from 'firebase';
+import { useAuth } from '../lib/auth';
+
+const Home = () => {
+  const auth = useAuth(); // import auth from our custom hook
+
+  return (
+    <div className="container">
+      <Head>
+        <title>Create Next App</title>
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
+
+      <main>
+        <h1 className="title">Fast Feedback</h1>
+
+        <p className="description">
+          Current user: <code>{auth?.user ? auth.user.email : 'None'}</code>
+        </p>
+
+        {/* conditionally show authentication login button only if a user does not already exist */}
+        {auth?.user ? (
+          <button onClick={(e) => auth.signout()}>Sign Out</button>
+        ) : (
+          <button onClick={(e) => auth.signinWithGithub()}>Sign In</button>
+        )}
+      </main>
+
+      <footer>
+        <a
+          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Powered by <img src="/vercel.svg" alt="Vercel Logo" />
+        </a>
+      </footer>
+	)
+}
+```
+
+![image-20201205233041200](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205233041200.png)
 
