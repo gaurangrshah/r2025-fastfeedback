@@ -44,3 +44,231 @@ cd fastfeedback && yarn
 yarn dev
 ```
 
+
+
+We'll also be using prettier to help format our files in vscode:
+
+```bash
+touch prettierrc.js
+```
+
+```js
+// prettierrc.js
+
+module.exports = {
+  arrowParens: 'always',
+  singleQuote: true,
+  tabWidth: 2,
+  trailingComman: 'none'
+}
+```
+
+
+
+
+
+## Setup Firebase
+
+- create a firebase account if none exists: [firebase](https://console.firebase.google.com/u/0/?pli=1)
+- create a new project: [firebase-console](https://console.firebase.google.com/u/0/?pli=1)
+
+<pre><code>
+<div style="display: flex;">
+        <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205214001675.png"/></div>
+        <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205214124524.png"/></div>
+        <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205214413704.png"/></div>
+  </div>
+</code></pre>
+
+
+
+- Select the web app icon to create a new app
+
+<pre><code>
+<div style="display: flex;">
+        <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205214514999.png"/></div>
+        <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205214702293.png"/></div>
+        <div><img src=""/></div>
+  </div>
+</code></pre>
+
+- make note of the credentials that are presented upon application creation:
+
+![image-20201205215027558](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205215027558.png)
+
+- create a new `.env.local` file in the root of your project to store our firebase credentials
+
+  ```
+  NEXT_PUBLIC_FIREBASE_API_KEY=
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+  ```
+
+  > **☝️ NOTE: ** we've prefied our environment variables with `NEXT_PUBLIC_` which tells next.js to expose these specific keys to our client side application. 
+  >
+  > - ❗️ Any non-prefixed keys will only be available to our application on the server-side
+
+
+
+## Setup Firebase Authentication
+
+- setup firebase auth - click the "authentication" box in the console:
+
+<pre><code>
+  <div style="display: flex;">
+          <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205222749228.png" /></div>
+        <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205223233666.png" /></div>
+        <div><img src="" /></div>
+  </div>
+</code></pre>
+
+> **☝️ NOTE:** we'll need the callback url shown at the bottom to properly setup our github authentication. 
+>
+> For now we'll leave the `ClientID` and `Client Secret`  empty for now, we'll configure our OAuth application with github which will then provide us with the details we need to get our authentication setup and working.
+
+
+
+
+
+
+
+### Setup Github OAuth Application
+
+In order to use github as an authentication provider, we'll need to create a new OAuth Application that we can then use in this application.
+
+[github oAuth settings](https://github.com/settings/applications/new)
+
+<pre><code>
+  <div style="display: flex;">
+        <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205223506206.png" /></div>
+        <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205223757429.png" /></div>
+        <div><img src="" /></div>
+  </div>
+</code></pre>
+
+- Once we've generated our `client id` and `client secret` from github we can use those to configure the authentication settings in firebase:
+
+  <pre><code>
+    <div style="display: flex;">
+          <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205224117665.png" /></div>
+          <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201205224234378.png" /></div>
+          <div><img src="" /></div>
+    </div>
+  </code></pre>
+
+  > Once we save we can see that now our github credentials are stored in firebase and github is enabled as an auth provider for our application.
+
+
+
+### Setup Firebase Local Environment
+
+- add firebase to our local dev environment:
+
+  ```bash
+  yarn add firebase
+  ```
+
+  
+
+- create a new folder called `/lib` and a new file called `firebase.js`
+
+  ```bash
+  mkdir lib && cd lib && touch firebase.js
+  ```
+
+- Now we can initialize our firebase application:
+
+  ```js
+  // lib/firebase.js
+  
+  import * as firebase from "firebase/app";
+  import "firebase/auth";
+  
+  if (!firebase.apps.length) {
+    firebase.initializeApp({
+      apiKey: NEXT_PUBLIC_FIREBASE_API_KEY,
+      authDomain: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      projectId: NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    });
+  }
+  
+  export default firebase;
+  ```
+
+
+
+
+
+- Next we can setup our authentication logic for firebase:
+
+  ```bash
+  touch lib/auth.js
+  ```
+
+- Now we can setup a custom hook that allows us to add authentication via firebase:
+
+  ```js
+  // lib/auth.js
+  
+  import React, { useState, useEffect, useContext, createContext } from 'react';
+  import firebase from './firebase'
+  
+  const authContext = createContext();
+  
+  export function ProvideAuth({ children }) {
+    const auth = useProvideAuth();
+    return <authContext.Provider value={auth}>{children}</authContext.Provider>;
+  }
+  
+  export const useAuth = () => {
+    // custom hook used to consume authContext
+    return useContext(authContext);
+  };
+  
+  function useProvideAuth() {
+    //
+    const [user, setUser] = useState(null);
+  
+    const signinWithGithub = (email, password) => {
+      return firebase
+        .auth()
+        .signInWithEmailAndPassword(email, password)
+        .then((res) => {
+          setUser(response.user);
+          return response.user;
+        });
+    };
+  
+    const signout = () => {
+      return firebase
+        .auth()
+        .signOut()
+        .then(() => {
+          setUser(false);
+        });
+    };
+  
+    useEffect(() => {
+      const unsubscribe = firebase.auth().onAuthStateChanged((user) => {
+        if (user) {
+          setUser(user);
+        } else {
+          setUser(false);
+        }
+      });
+    }, []);
+  
+    return {
+      userId: user && user.uid,
+      signinWithGithub,
+      signout,
+    };
+  }
+  ```
+
+  > **❗️NOTE:** currently we've setup our code for accepting email and password as a login option, although we'll be updating this so that we can use github authentication instead.
+
+
+
+
+
