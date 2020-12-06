@@ -168,7 +168,11 @@ In order to use github as an authentication provider, we'll need to create a new
   yarn add firebase
   ```
 
-  
+
+
+> **☝️ NOTE:** we'll be following some of the steps to configure github auth from the [firebase docs](https://firebase.google.com/docs/auth/web/github-auth)
+
+
 
 - create a new folder called `/lib` and a new file called `firebase.js`
 
@@ -229,10 +233,10 @@ In order to use github as an authentication provider, we'll need to create a new
     //
     const [user, setUser] = useState(null);
   
-    const signinWithGithub = (email, password) => {
+    const signinWithGithub = () => {
       return firebase
         .auth()
-        .signInWithEmailAndPassword(email, password)
+        .signInWithPopup(new firebase.auth.GithubAuthProvider())
         .then((res) => {
           setUser(response.user);
           return response.user;
@@ -259,16 +263,24 @@ In order to use github as an authentication provider, we'll need to create a new
     }, []);
   
     return {
-      userId: user && user.uid,
+      user,
       signinWithGithub,
       signout,
     };
   }
   ```
 
-  > **❗️NOTE:** currently we've setup our code for accepting email and password as a login option, although we'll be updating this so that we can use github authentication instead.
+  > **❗️NOTE:** currently we've setup our code for authenticating via GitHub, you can also take a look at a similar setup for authenticating via email and password if needed [refer to this commit](https://github.com/gaurangrshah/r2025-fastfeedback/commit/4f54d409791bf0c1f9a163a84fd998af81b0b635)
 
 
 
+### Setup custom _app with auth provider
 
+```js
+// pages/_app.js
+
+
+```
+
+> **💡** Next.js uses the `App` component to initialize pages. We've overridden it in order to wrap our application with the authentication provider. 
 
