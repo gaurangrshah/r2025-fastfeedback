@@ -1,4 +1,5 @@
 import { extendTheme } from '@chakra-ui/react';
+import styles from './global';
 
 const theme = extendTheme({
   fonts: {
@@ -9,6 +10,7 @@ const theme = extendTheme({
     medium: 600,
     bold: 700,
   },
+  styles, // add custom global styles
 });
 
 export default theme;
