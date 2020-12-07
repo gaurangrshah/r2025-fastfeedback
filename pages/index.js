@@ -8,7 +8,7 @@ const Home = () => {
   return (
     <div className="container">
       <Head>
-        <title>Create Next App</title>
+        <title>Fast Feedback</title>
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
@@ -16,14 +16,14 @@ const Home = () => {
         <h1 className="title">Fast Feedback</h1>
 
         <p className="description">
-          Current user: <code>{auth?.user ? auth.user.email : 'None'}</code>
+          Current user: <code>{auth.user ? auth.user.email : 'None'}</code>
         </p>
 
         {/* conditionally show authentication login button only if a user does not already exist */}
         {auth?.user ? (
           <button onClick={(e) => auth.signout()}>Sign Out</button>
         ) : (
-          <button onClick={(e) => auth.signinWithGithub()}>Sign In</button>
+          <button onClick={(e) => auth.signinWithGitHub()}>Sign In</button>
         )}
       </main>
 
