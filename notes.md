@@ -236,6 +236,8 @@ In order to use github as an authentication provider, we'll need to create a new
     };
   }
   
+  ```
+
 const formatUser = (user) => {
     return {
       uid: user.uid,
@@ -245,14 +247,14 @@ const formatUser = (user) => {
       photoUrl: user.photoURL,
     };
   };
-  
+
   ```
   
   > **❗️NOTE:** currently we've setup our code for authenticating via GitHub, you can also take a look at a similar setup for authenticating via email and password if needed [refer to this commit](https://github.com/gaurangrshah/r2025-fastfeedback/commit/4f54d409791bf0c1f9a163a84fd998af81b0b635)
 
 ### Setup custom \_app with auth provider
 
-```jsx
+​```jsx
 // pages/_app.js
 
 import { AuthProvider } from '../lib/auth';
@@ -267,7 +269,7 @@ function App({ Component, pageProps }) {
 
 export default App;
 
-```
+  ```
 
 > **💡** Next.js uses the `App` component to initialize pages. We've overridden it in order to wrap our application with the authentication provider.
 
@@ -714,7 +716,8 @@ export default App;
 > export default theme;
 > ```
 >
-> 
+
+
 
 
 
@@ -758,4 +761,125 @@ export default App;
 > // import { useAuth } from '../lib/auth';
 > 
 > ```
+
+
+
+
+
+## Create custom icons
+
+```bash
+yarn add @chakra-ui/icons
+```
+
+
+
+```js
+// styles/icons.js
+
+export const LogoIcon = (props) => (
+  <Icon viewBox="0 0 46 32" {...props}>
+    <path
+      d="M19.557.113C11.34.32 9.117 8.757 9.03 12.95c1.643-2.67 4.62-3.08 6.931-3.08 2.825.085 10.27.205 17.458 0C40.61 9.663 44.802 3.28 46 .112c-5.391-.085-18.228-.205-26.443 0zM14.422 14.234C3.332 14.234-.468 24.76.045 31.948c3.594-6.418 7.617-7.53 9.243-7.445h6.675c5.956 0 11.039-6.846 12.836-10.27H14.422z"
+      // fill="currentColor"
+    />
+  </Icon>
+);
+```
+
+
+
+Finally, we can use this logo throughout our application:
+
+```jsx
+// pages/index.js
+
+import { Box, Button, Code, Heading, Text } from '@chakra-ui/react';
+import { LogoIcon } from '../styles/icons';
+import { useAuth } from '@/lib/auth';
+
+const Home = () => {
+  const auth = useAuth(); // import auth from our custom hook
+
+  return (
+    <Box>
+			
+    	{/*...*/}
+
+				{/* Custom Logo Icon Usage*/}
+        <LogoIcon boxSize={12} fill="blue.200"/>
+
+        {auth?.user ? (
+          <Button onClick={(e) => auth.signout()}>Sign Out</Button>
+        ) : (
+          <Button onClick={(e) => auth.signinWithGitHub()}>Sign In</Button>
+        )}
+        
+      </Box>
+
+    	{/*...*/}
+
+    </Box>
+  );
+};
+
+export default Home;
+```
+
+
+
+
+
+### DashBoard UI
+
+We'll be creating our dashboard ui components:
+
+[/components/dashboard-shell.js](https://github.com/leerob/fastfeedback/blob/bfd960ec0ead6778025c4d8025fce9aa23602b50/components/DashboardShell.js) - [/components/free-plan-empty-state.js](https://github.com/leerob/fastfeedback/blob/bfd960ec0ead6778025c4d8025fce9aa23602b50/components/FreePlanEmptyState.js) - [/components/add-site-modal.js](https://github.com/leerob/fastfeedback/blob/bfd960ec0ead6778025c4d8025fce9aa23602b50/components/AddSiteModal.js)
+
+[/components/empty-state.js](https://github.com/leerob/fastfeedback/blob/bfd960ec0ead6778025c4d8025fce9aa23602b50/components/EmptyState.js) - [/pages/dashboard.js](https://github.com/leerob/fastfeedback/blob/bfd960ec0ead6778025c4d8025fce9aa23602b50/pages/dashboard.js) 
+
+
+
+⚠️ We've also ensure that the dashboard route is only accessible to logged in users: 
+
+
+
+- Now once we login we can see our new layout:
+
+  ![image-20201207234350606](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201207234350606.png)
+
+- Now we can update our database with the functionality to create a new site for us:
+
+  ```js
+  // lib/db.js
+  
+  import firebase from './firebase';
+  
+  const firestore = firebase.firestore();
+  
+  export function createUser(uid, data) {
+    return (
+      firestore
+        .collection('users') // db table name
+        .doc(uid)
+        .set({ uid, ...data }, { merge: true })
+    );
+  }
+  
+  // export a function to help create sites for us in the database
+  export function createSite(data) {
+    // sets a new table called sites
+    return firestore.collection('sites').add(data);
+  }
+  ```
+
+  
+
+  We'll need a form-handling library - this will render a form in our modal allowing us to use our `createSite()` functionality:
+
+  ```bash
+  yarn add react-hook-form
+  ```
+
+  ![image-20201208000509688](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201208000509688.png)
 
