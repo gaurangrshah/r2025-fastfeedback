@@ -2,6 +2,7 @@ import Head from 'next/head';
 import { Box, Button, Code, Flex, Heading, Text } from '@chakra-ui/react';
 import { LogoIcon } from '../styles/icons';
 import { useAuth } from '@/lib/auth';
+import Link from "next/link"
 
 const Home = () => {
   const auth = useAuth(); // import auth from our custom hook
@@ -27,6 +28,9 @@ const Home = () => {
               Current user: <Code>{auth.user ? auth.user.email : 'None'}</Code>
             </Text>
             <Button onClick={(e) => auth.signout()}>Sign Out</Button>
+            <Link href="/dashboard">
+              <a>Dashboard</a>
+            </Link>
           </>
         ) : (
           <Button variant="link" size="sm" onClick={(e) => auth.signinWithGitHub()}>Sign In</Button>

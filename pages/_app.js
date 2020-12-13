@@ -4,7 +4,7 @@ import { AuthProvider } from '@/lib/auth';
 import theme from '@/styles/theme';
 
 function App({ Component, pageProps }) {
-  console.log(theme)
+  // console.log(theme)
   return (
     <ChakraProvider theme={theme} resetCSS>
       <AuthProvider>

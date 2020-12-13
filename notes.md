@@ -883,3 +883,577 @@ We'll be creating our dashboard ui components:
 
   ![image-20201208000509688](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201208000509688.png)
 
+
+
+#### Update Create Site Function:
+
+```js
+// components/add-site-modal.js
+
+import { useAuth } from '@/lib/auth'; // used to add current user to newly created site
+import { useToast } from '@chakra-ui/react' // used to send success response
+
+
+const AddSiteModal = ({ children }) => {
+  
+	const auth = useAuth();
+  const toast = useToast();
+
+  /*...*/
+
+  const onCreateSite = ({ name, url }) => {
+  // ❌ const onCreateSite = (values) => {
+  //    createSite(values);
+    
+     createSite({
+       // setup initialized fields author and date:
+       authorId: auth.user.id,
+       createdAt: new Date().toISOString(),
+      // add user input fields:
+      name,
+      url
+     });
+    
+    // adds toast success response
+     toast({
+       title: 'Success!',
+       description: "We've added your site.",
+       status: 'success',
+       duration: 5000,
+       isClosable: true
+     });
+    
+// used to refetch queries after updates
+    mutate(
+      // refetch the cached sites
+      '/api/sites',
+      async (data) => {
+        // take the cached sites and manually update with newSite
+        return { sites: [...data.sites, newSite] };
+        // ☝️ This is client side only -- so a document id will not be available yet
+      },
+      false
+    );
+    
+     onClose();
+   };
+  
+  /*...*/
+  
+  
+}
+
+```
+
+> With this in place we've now added our generated fields (author, and createdAt) along with the fields the user provides input for (site, url) to our database:
+>
+>
+>    <div style="display: flex;">
+>         <div>old entries:<img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201212131710011.png" /></div>
+>         <div>new entries:<img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201212131629156.png" /></div>
+>   </div>
+
+
+
+Also before we move on we'll simply update our modal button styles:
+
+```jsx
+// components/add-site-modal.js
+
+const AddSiteModal = ({ children }) => {
+
+
+  /*...*/
+
+    <Button
+      onClick={onOpen}
+      backgroundColor="gray.900"
+      color="white"
+      fontWeight="medium"
+      _hover={{ bg: 'gray.700' }}
+      _active={{
+        bg: 'gray.800',
+          transform: 'scale(0.95)'
+      }}
+      >
+      {children}
+    </Button>
+
+  /*...*/
+  
+}
+```
+
+
+
+And now we can update our dashboard-shell component to render add site modal properly:
+
+```jsx
+// components/dashboard-shell.js
+
+const DashboardShell = ({ children }) => {
+
+	/*...*/
+  <Flex justifyContent="space-between">
+    <Heading mb={8}>My Sites</Heading>
+    
+    {/* ❌
+    		<Button
+            backgroundColor="gray.900"
+            color="white"
+            fontWeight="medium"
+            _hover={{ bg: 'gray.700' }}
+            _active={{
+              bg: 'gray.800',
+              transform: 'scale(0.95)',
+            }}
+          >
+            + Add Site
+          </Button> 
+     */}
+  	<AddSiteModal>+ Add Site</AddSiteModal>
+    
+  </Flex>
+  /*...*/
+
+}
+```
+
+
+
+And we'll need to make sure we're rendering children properly in our EmptyState component as well:
+
+```jsx
+// components/empty-state.js
+
+ const EmptyState = () => (
+   <DashboardShell>
+       {/*...*/}
+
+       {/* ❌ <AddSiteModal /> */}
+       <AddSiteModal> + Add Site</AddSiteModal>
+
+       {/*...*/}
+
+   </DashboardShell>
+ );
+```
+
+
+
+
+
+## Initialize Firebase Admin SDK
+
+```bash
+yarn add firebase-admin
+```
+
+
+
+- **Generate New Admin Private Key**
+
+  ![firebase-admin](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/firebase-admin.gif)
+
+  > **⚠️ NOTE:** the private key is generated as a JSON file and can be found in your downloads folder.
+
+
+
+Just like how we implemented our client-side firebase config, we'll take similar steps to setup our server-side firebase admin:
+
+```js
+// lib/firebase-admin.js
+
+import admin from 'firebase-admin';
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      private_key: process.env.FIREBASE_PRIVATE_KEY,
+      project_id: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    }),
+    // ⚠️ verify databaseURL / database name
+    databaseURL: 'https://fast-feedback.firebaseio.com', 
+  });
+}
+
+export default admin.firestore();
+```
+
+> **☝️ NOTE**: we'll need to add the following keys to our .env.local:
+>
+> ```bash
+> FIREBASE_CLIENT_EMAIL=
+> FIREBASE_PRIVATE_KEY=
+> NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+> ```
+>
+> **⚠️ ALSO NOTE:** we needed to provide the `databaseURL` to configure the server-side admin, although because of recent changes to the backend firebase no longer provides this in their sdk config or in the generated private key json file, so we've inferred it based on the following from the firebase docs:
+>
+> ```js
+> // https://firebase.google.com/docs/admin/setup?authuser=0#initialize-sdk
+> 
+> admin.initializeApp({
+>   credential: admin.credential.applicationDefault(),
+>   databaseURL: 'https://<DATABASE_NAME>.firebaseio.com'
+> });
+> ```
+>
+> - So we simply just need our database_name to prefix the url with which we can find as such:
+>
+>   ![image-20201212145121158](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201212145121158.png)
+
+
+
+Once we have the setup complete we can create our first API route to test our connection: [firestore docs](https://firebase.google.com/docs/firestore/query-data/get-data)
+
+```js
+// pages/api/sites.js
+
+import db from '@/lib/firebase-admin';
+
+export default async (_, res) => {
+  // grab items from sites tab;e
+  const snapshot = await db.collection('sites').get();
+  const sites = [];
+
+  snapshot.forEach((doc) => {
+    // add each site to the table
+    sites.push({ id: doc.id, ...doc.data() });
+  });
+
+  // return sites table as json
+  res.status(200).json({ sites });
+};
+```
+
+> If we've successfully set our admin sdk up, we should see our sites being output to the DOM:
+>
+> ![image-20201212160344676](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201212160344676.png)
+
+
+
+
+
+### Create Table UI
+
+We'll need some table elements to properly display our sites that we get back from the database:
+
+```jsx
+// components/table.js
+
+import React from 'react';
+import { Box, Text } from '@chakra-ui/react';
+
+export const Th = (props) => (
+  <Text
+    as="th"
+    textTransform="uppercase"
+    fontSize="xs"
+    color="gray.500"
+    fontWeight="medium"
+    px={4}
+    {...props}
+  />
+);
+
+export const Td = (props) => (
+  <Box
+    as="td"
+    color="gray.900"
+    p={4}
+    borderBottom="1px solid"
+    borderBottomColor="gray.100"
+    {...props}
+  />
+);
+
+export const Tr = (props) => (
+  <Box
+    as="tr"
+    backgroundColor="gray.50"
+    borderTopLeftRadius={8}
+    borderTopRightRadius={8}
+    borderBottom="1px solid"
+    borderBottomColor="gray.200"
+    height="40px"
+    {...props}
+  />
+);
+
+export const Table = (props) => {
+  return (
+    <Box
+      as="table"
+      textAlign="left"
+      backgroundColor="white"
+      ml={0}
+      mr={0}
+      borderRadius={8}
+      boxShadow="0px 4px 10px rgba(0, 0, 0, 0.05)"
+      w="full"
+      {...props}
+    />
+  );
+};
+```
+
+> Styled table elements, including th, td, and tr
+
+
+
+Next we can create a selecton for our expected data using the table components we've created:
+
+```jsx
+// components/site-table-skeleton.js
+
+import React from 'react';
+ import { Box, Skeleton } from '@chakra-ui/react';
+ import { Table, Tr, Th, Td } from './table';
+
+ const SkeletonRow = ({ width }) => (
+   <Box as="tr">
+     <Td>
+       <Skeleton height="10px" w={width} my={4} />
+     </Td>
+     <Td>
+       <Skeleton height="10px" w={width} my={4} />
+     </Td>
+     <Td>
+       <Skeleton height="10px" w={width} my={4} />
+     </Td>
+     <Td>
+       <Skeleton height="10px" w={width} my={4} />
+     </Td>
+   </Box>
+ );
+
+ const SiteTableSkeleton = () => {
+   return (
+     <Table>
+       <thead>
+         <Tr>
+           <Th>Name</Th>
+           <Th>Site Link</Th>
+           <Th>Feedback Link</Th>
+           <Th>Date Added</Th>
+           <Th>{''}</Th>
+         </Tr>
+       </thead>
+       <tbody>
+         <SkeletonRow width="75px" />
+         <SkeletonRow width="125px" />
+         <SkeletonRow width="50px" />
+         <SkeletonRow width="100px" />
+         <SkeletonRow width="75px" />
+       </tbody>
+     </Table>
+   );
+ };
+
+ export default SiteTableSkeleton;
+```
+
+> This allows us to render a skeleton based on the shape of the data we expect to come back from our database. This will replace our `Loading...` text and give a better user experience. 
+
+
+
+Now that we have a skeleton in place for our data loading, let's get that rendered in our dashboard, first lets remove the dashboard wrapper from the Empty State and only apply it after we hae data loaded:
+
+```jsx
+// components/empty-state.js
+
+ const EmptyState = () => (
+  //❌  <DashboardShell>
+  
+     <Flex
+       width="100%"
+       backgroundColor="white"
+       borderRadius="8px"
+       p={16}
+       justify="center"
+       align="center"
+       direction="column"
+     >
+       <Heading size="lg" mb={2}>
+         You haven’t added any sites.
+       </Heading>
+       <Text mb={4}>Let’s get started.</Text>
+       {/* ❌ <AddSiteModal /> */}
+       <AddSiteModal> + Add Site</AddSiteModal>
+     </Flex>
+
+  //  </DashboardShell>
+ );
+```
+
+
+
+Then lets make sure we render the skeleton and the DashboardShell wrapper properly:
+
+```jsx
+// pages/dashboard.js
+
+const Dashboard = () => {
+  const auth = useAuth();
+
+  if (!auth.user) {
+    // ❌ return 'Loading...';
+    return <SiteTableSkeleton />;
+  }
+
+  return (
+    <DashboardShell>
+      <EmptyState />
+    </DashboardShell>
+  );
+};
+```
+
+
+
+Lastly lets update our dashboard shell to make sure we're only showing the logout button when there is a user logged in:
+
+```jsx
+// components/DashboardShell.js
+
+const DashboardShell = ({ children }) => {
+  const { user, signout } = useAuth();
+
+  return (
+    <Box backgroundColor="gray.100" h="100vh">
+			{/*...*/}
+
+      <Flex justifyContent="center" alignItems="center">
+        {user && (
+          <Button variant="ghost" mr={2} onClick={() => signout()}>
+            Log Out
+          </Button>
+        )}
+        <Avatar size="sm" src={user?.photoUrl} />
+      </Flex>
+      
+    	{/*...*/}
+    </Box>
+  );
+};
+```
+
+
+
+
+
+Now we can see if this works we should see our skeleton appear right before our data gets loaded:
+
+![table-skeleton2](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/table-skeleton2.gif)
+
+
+
+
+
+Now that we have our table setup and a skeleton in place, we can work on our actual data-fetching:
+
+```bash
+yarn add swr
+```
+
+> https://github.com/vercel/swr
+
+
+
+create our fetch helper: 
+
+```js
+// utils/fetcher.js
+
+export default async (...args) => {
+   const res = await fetch(...args);
+
+   return res.json();
+ };
+```
+
+> This is a default fetch function that helps implement swr -- and can be customized for your use-case
+
+
+
+Use fetch helper to fetch data:
+
+```jsx
+// pages/dashboard.js
+
+import useSWR from 'swr';
+
+const Dashboard = () => {
+  const auth = useAuth();
+  const { data } = useSWR('/api/sites', fetcher);
+
+  // ❌ if (!auth.user) {
+  //   return <SiteTableSkeleton />;
+  // }
+
+  if (!data) {
+    <DashboardShell>
+      <EmptyState />
+    </DashboardShell>;
+  }
+
+  return (
+    <DashboardShell>
+      {data?.sites ? <SiteTable sites={data.sites} /> : <EmptyState />}
+    </DashboardShell>
+  );
+};
+```
+
+> Now our render state depends solely on whether or not we get related data back from the database -- we're no longer depending on the existence of a user in order to render our content. 
+
+
+
+Next we'll need a table similar to our skeleton to handle our actual data:
+
+```jsx
+// components/site-table.js
+
+import React from 'react';
+import { Box, Link } from '@chakra-ui/react';
+import { Table, Tr, Th, Td } from './table';
+import { parseISO, format } from 'date-fns';
+
+const SiteTable = ({ sites }) => {
+  return (
+    <Table>
+      <thead>
+        <Tr>
+          <Th>Name</Th>
+          <Th>Site Link</Th>
+          <Th>Feedback Link</Th>
+          <Th>Date Added</Th>
+          <Th>{''}</Th>
+        </Tr>
+      </thead>
+      <tbody>
+        {sites.map((site) => (
+          <Box as="tr" key={site.url}>
+            <Td fontWeight="medium">{site.name}</Td>
+            <Td>{site.url}</Td>
+            <Td>
+              <Link>View Feedback</Link>
+            </Td>
+            <Td>{format(parseISO(site.createdAt), 'PPpp')}</Td>
+          </Box>
+        ))}
+      </tbody>
+    </Table>
+  );
+};
+
+export default SiteTable;
+
+```
+
+With this in place we are now able to properly render our sites as a table:
+
+![image-20201212180146861](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201212180146861.png)
+
