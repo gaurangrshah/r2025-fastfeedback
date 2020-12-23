@@ -21,7 +21,8 @@ const Dashboard = () => {
 
   return (
     <DashboardShell>
-      {data?.sites ? <SiteTable sites={data.sites} /> : <EmptyState />}
+      {/* ❌ {data?.sites ? <SiteTable sites={data.sites} /> : <EmptyState />} */}
+      {data?.sites ? <SiteTable sites={data.sites.sites} /> : <EmptyState />}
     </DashboardShell>
   );
 };

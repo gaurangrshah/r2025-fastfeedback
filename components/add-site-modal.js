@@ -61,7 +61,7 @@ const AddSiteModal = ({children}) => {
       async (data) => {
         // take the cached sites and manually update with newSite
         return { sites: [...data.sites, newSite] };
-        // ☝️ This is client side only.
+        // ☝️ This is client side only -- so a document id will not yet be available
       },
       false
     );

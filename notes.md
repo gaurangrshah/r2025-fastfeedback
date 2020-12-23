@@ -1457,3 +1457,581 @@ With this in place we are now able to properly render our sites as a table:
 
 ![image-20201212180146861](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201212180146861.png)
 
+
+
+
+
+## Creating Feedback Pages
+
+
+
+Start by creating a new collection in firestore called 'feedback' and define the initial schema:
+
+![feedback_collection](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/feedback_collection.gif)
+
+
+
+Fill out our dummy example entry with valid data to help us populate this collection on the front-end:
+
+![image-20201223002057796](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201223002057796.png)
+
+> Here we've populated the values using our own author info and an existing site created by the same author. 
+
+
+
+Next we'll need to create a new database config to help us manage our server-side admin database content:
+
+```js
+// lib/db-admin.js
+
+import firebase from './firebase-admin';
+
+export async function getAllFeedback(siteid) {
+  // get all feedback related to site, based on siteId
+  const snapshot = await firebase.collection('feedback').where('siteId',  '==', siteId).get()
+  const feedback = []
+
+  snapshot.forEach((doc) => {
+    feedback.push({id: doc.id, ...doc.data})
+  })
+  return feedback
+}
+```
+
+
+
+Now we can setup an api route to test this implementation:
+
+```js
+// pages/api/feedback/[siteId].js
+
+import { compareDesc, parseISO } from 'date-fns';
+
+import firebase from './firebase-admin';
+
+export async function getAllFeedback(siteId) {
+  // get all feedback related to site, based on siteId
+  const snapshot = await firebase.collection('feedback').where('siteId', '==', siteId).get();
+  const feedback = [];
+
+  snapshot.forEach((doc) => {
+    // push feedback values to array
+    feedback.push({ id: doc.id, ...doc.data() });
+  });
+  
+  // sort feedback in descending order so that comments are rendered based on date
+  feedback.sort((a,b) => compareDesc(parseISO(a.createdAt), parseISO(b.createdAt))
+  return feedback;
+}
+```
+
+
+
+Now if we navigate to `http://localhost:3000/api/feedback/[siteid]`, we will see the related feedback for that particular site:
+
+![image-20201223003955179](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201223003955179.png)
+
+
+
+Now that we know our api is working we can being to generate the page that will be used to display the information on the front-end for any given site:
+
+```js
+// pages/p/[siteId].js
+
+export async function getStaticProps (context) {
+  return {
+    props: {
+      // hard-coding initial feedback 
+      initialFeedback: []
+    },
+  }
+}
+
+export async function getStaticPaths() {
+  return {
+    paths: [
+      {
+        params: {
+          siteId: '8UmRJWvakHP8KKBjKwab',
+        },
+      },
+    ],
+    fallback: false
+  };
+}
+
+const SiteFeedback = ({initialFeedback}) => {{
+  return 'Hello World';
+
+}
+
+export default SiteFeedback
+```
+
+> We've scaffolded out our site feedback page, and we simply want to ensure that it prints 'Hello World' when we navigate to it with any siteId:
+>
+> ![image-20201223004650447](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201223004650447.png)
+
+
+
+> ⚠️  Since we want to avoid making direct server calls to our database from `getStaticProps()` or `getStaticPaths()` we'll abstract that logic back from our api route: `api/sites` into the server-side handler we created for our database:
+>
+> ```js
+> // lib/db-admin.js
+> 
+> export async function getAllFeedback(siteId) {
+> 	/*...*/
+> }
+> 
+> 
+> export async function getAllSites() {
+>   // grab items from sites table
+>   const snapshot = await firebase.collection('sites').get();
+>   const sites = [];
+> 
+>   snapshot.forEach((doc) => {
+>     // add each site to the array of sites to be returned to client-side
+>     sites.push({ id: doc.id, ...doc.data() });
+>   });
+> 
+>   return sites;
+> }
+> ```
+>
+> Now we can make sure that the api route uses the handler logic we've defined above:
+>
+> ```js
+> // pages/api/sites.js
+> 
+> // import db from '@/lib/firebase-admin';
+> import { getAllSites } from '@/lib/db-admin';
+> 
+> export default async (_, res) => {
+> 
+>   // ❌ abstracted to db-admin
+>   // // grab items from sites tab;e
+>   // const snapshot = await db.collection('sites').get();
+>   // const sites = [];
+> 
+>   // snapshot.forEach((doc) => {
+>   //   // add each site to the array of sites to be returned to client-side
+>   //   sites.push({ id: doc.id, ...doc.data() });
+>   // });
+> 
+>   const sites = await getAllSites() // use abstracted function instead
+> 
+>   // return sites table as json
+>   res.status(200).json({ sites });
+> };
+> 
+> ```
+
+
+
+
+
+Now we can use the logic we just abstracted out to help us render any particular site on the front-end:
+
+```jsx
+// pages/p/[siteId].js
+
+import { Box } from '@chakra-ui/react';
+
+import { getAllFeedback, getAllSites } from '@/lib/db-admin';
+import Feedback from '@/components/feedback';
+
+export async function getStaticProps (context) {
+  const siteId = context.params.siteId
+  // get all feedback related to siteId
+  const feedback = await getAllFeedback(siteId)
+  return {
+    props: {
+      initialFeedback: feedback // pass feedback from firestore as props to page component
+    },
+  }
+}
+
+export async function getStaticPaths() {
+  const sites = await getAllSites()
+  const paths = sites.map(site => ({
+    params: {
+      siteId: site.id.toString()
+    }
+  }))
+
+  return {
+    paths,
+    fallback: false
+  };
+}
+
+const SiteFeedback = ({ initialFeedback }) => {
+  return (
+    <Box display="flex" flexDirection="column" width="full" maxWidth="700px" margin="0 auto">
+      {initialFeedback.map((feedback) => {
+        return <Feedback key={feedback.id} {...feedback} />;
+      })}
+    </Box>
+  );
+};
+
+
+export default SiteFeedback
+```
+
+
+
+
+
+We've used the <Feedback /> component to help us render our feedback, which takes in all of the values from the database for each feedback item and helps us render them to the front-end:
+
+```js
+// components/feedback.js
+
+import { Box, Heading, Text, Divider } from '@chakra-ui/react';
+import { format, parseISO } from 'date-fns';
+
+const Feedback = ({ author, text, createdAt }) => {
+
+  return (
+    <Box borderRadius={4} maxWidth="700px" w="full">
+      <Heading size="sm" as="h3" mb={0} color="gray.900" fontWeight="medium">
+        {author}
+      </Heading>
+      <Text color="gray.500" mb={4} fontSize="xs">
+        {format(parseISO(createdAt), 'PPpp')}
+      </Text>
+      <Text color="gray.800">{text}</Text>
+      <Divider borderColor="gray.200" backgroundColor="gray.200" mt={8} mb={8} />
+    </Box>
+  );
+};
+
+export default Feedback;
+```
+
+
+
+
+
+With this in place we can see that we're able to render the data from the example feedback we created for this particular site:
+
+![image-20201223012138991](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201223012138991.png)
+
+
+
+
+
+Next we'll want to create the logic we need to create a new comment for our feedback.
+
+So we'll need to add a form the logic needed to save new comments to our database:
+
+```jsx
+// pages/p/[siteId].js
+
+/*...*/
+
+
+const SiteFeedback = ({ initialFeedback }) => {
+  // stores feedback in local state
+    const [allFeedback, setAllFeedback] = useState(initialFeedback)
+
+    const auth = useAuth() // used to populate the author info when submitting form
+    const router = useRouter() // used to populate siteId when submitting form
+
+    const inputEl = useRef(null); // used to populate the input value when submitting form
+
+    const onSubmit = (e) => {
+      e.preventDefault();
+
+      const newFeedback = {
+        // create feedback object to set new comment to database as feedback
+        author: auth.user.name,
+        authorId: auth.user.uid,
+        siteId: router.query.siteId,
+        text: inputEl.current.value,
+        createdAt: new Date().toISOString(),
+        provider: auth.user.provider,
+        status: 'pending',
+      };
+
+      setAllFeedback([newFeedback, ...allFeedback]); // add new comment to local state
+      createFeedback(newFeedback); // update database
+    };
+
+  return (
+
+    <Box display="flex" flexDirection="column" width="full" maxWidth="700px" margin="0 auto">
+      {auth.user && (
+        <Box as="form" onSubmit={onSubmit}>
+          <FormControl my={8}>
+            <FormLabel htmlFor="comment">Comment</FormLabel>
+            <Input ref={inputEl} id="comment" placeholder="Leave a comment" />
+            <Button mt={4} type="submit" fontWeight="medium">
+              Add Comment
+            </Button>
+          </FormControl>
+        </Box>
+      )}
+      {allFeedback.map((feedback) => {
+        // renders comments from local state
+        return <Feedback key={feedback.id} {...feedback} />;
+      })}
+    </Box>
+
+  );
+};
+```
+
+
+
+You'll notice we used a handler that will help us save new feedback to our database, we've defined that logic in our client side version of our database:
+
+```js
+// lib/db.js
+
+/*...*/
+
+
+export function createFeedback(data) {
+  // sets new record for each user submitted feedback
+  return firestore.collection('feedback').add(data);
+}
+```
+
+
+
+Now with this in place we can attempt to add a new comment from our front-end, once saved it should be visible after a page refresh:
+
+![image-20201223015412597](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201223015412597.png)
+
+
+
+### Add Error Handling
+
+```js
+// lib/db-admin.js
+
+import { compareDesc, parseISO } from 'date-fns';
+
+import firebase from './firebase-admin';
+
+export async function getAllFeedback(siteId) {
+  try {
+    // get all feedback related to site, based on siteId
+    const snapshot = await firebase.collection('feedback').where('siteId', '==', siteId).get();
+    const feedback = [];
+
+    snapshot.forEach((doc) => {
+      // push feedback values to array
+      feedback.push({ id: doc.id, ...doc.data() });
+    });
+
+    // sort feedback in descending order so that comments are rendered based on date
+    feedback.sort((a, b) => compareDesc(parseISO(a.createdAt), parseISO(b.createdAt)));
+    
+    return { feedback };
+    
+  } catch (error) {
+    
+    return { error };
+    
+  }
+}
+
+export async function getAllSites() {
+  try {
+    // grab items from sites tab;e
+    const snapshot = await firebase.collection('sites').get();
+    const sites = [];
+
+    snapshot.forEach((doc) => {
+      // add each site to the array of sites to be returned to client-side
+      sites.push({ id: doc.id, ...doc.data() });
+    });
+
+    return { sites };
+
+  } catch (error) {
+    
+    return { error };
+    
+  }
+}
+
+```
+
+> Here we've simply wrapped logic in a try-catch block, to help us surface any errors that are thrown. 
+>
+> We're also returning our values as an object { } and so we'll need to update how we handle this on the client side as well. 
+>
+> ```js
+> // pages/p/[siteId].js
+> 
+> export async function getStaticProps(context) {
+>   const siteId = context.params.siteId;
+>   // get all feedback related to siteId
+>   
+> // now we're simply destructuring feedback because we've returned it as an obj
+>   const { feedback } = await getAllFeedback(siteId);
+>   
+>   return {
+>     props: {
+>       initialFeedback: feedback, // pass feedback from firestore as props to page component
+>     },
+>   };
+> }
+> ```
+>
+> ```js
+> // pages/p/[siteId].js
+> 
+> export async function getStaticPaths() {
+> 	
+>   // we're also destructuring sites because it was also returned as an object
+>   const { sites } = await getAllSites();
+>   
+>   const paths = sites.map((site) => ({
+>     params: {
+>       siteId: site.id.toString(),
+>     },
+>   }));
+> 
+>   return {
+>     paths,
+>     fallback: false,
+>   };
+> }
+> ```
+>
+>
+> We'll also want to make this change anywhere in our api that we're using these same functions:
+>
+> ```js
+> // pages/api/feedback/[siteId].js
+> 
+> import { getAllFeedback } from '@/lib/db-admin';
+> 
+> export default async(req, res) => {
+>   const siteId = req.query.siteId;
+>   
+>   // ❌ const feedback = await getAllFeedback(siteId)
+>   const { feedback, error } = await getAllFeedback(siteId)
+> 
+>   if(error) {
+>     res.status(500).json({ error });
+>   }
+> 
+>   res.status(200).json({ feedback });
+> }
+> 
+> ```
+>
+> Here we've also added some error handling to ensure we're again surfacing any errors from our api call. 
+>
+>
+> We can do the same thing for our other api call
+>
+>
+> ```js
+> // pages/api/sites.js
+> 
+> import { getAllSites } from '@/lib/db-admin';
+> 
+> export default async (_, res) => {
+> 
+> 
+>   const {sites, error} = await getAllSites()
+> 	if(error) {
+> 		  res.status(500).json({ error });    
+>   }
+>   
+>   res.status(200).json({ sites });
+> };
+> 
+> ```
+>
+> We'll also have to update some of the dashboard logic to ensure we're still rendering our sites properly on the dashboard since we changed how they're being returned:
+>
+> ```jsx
+> // pages/dashboard.js
+> 
+> const Dashboard = () => {
+> 
+> 	/*...*/
+> 
+>   return (
+>     <DashboardShell>
+>       {/* ❌ {data?.sites ? <SiteTable sites={data.sites} /> : <EmptyState />} */}
+>       {data?.sites ? <SiteTable sites={data.sites.sites} /> : <EmptyState />}
+>     </DashboardShell>
+>   );
+> };
+> ```
+
+
+
+Lastly we'll need to update how we render our links on our Sitetable:
+
+```jsx
+// components/site-table.js
+
+const SiteTable = ({ sites }) => {
+  return (
+    
+    {/*...*/}
+
+        {sites.map((site) => (
+          <Box as="tr" key={site.url}>
+            <Td fontWeight="medium">{site.name}</Td>
+            <Td>
+              
+              {/* ❌ <Link>View Feedback</Link> */}
+              <Link href={site.url} isExternal>
+                {site.url}
+              </Link>
+              
+            </Td>
+            <Td>
+              // add link to view feedback:
+              <NextLink href="/p/[siteId]" as={`/p/${site.id}`} passHref>
+                <Link>View Feedback</Link>
+              </NextLink>
+              
+            </Td>
+            {/* used to format the date/time to a human readable string */}
+            <Td>{format(parseISO(site.createdAt), 'PPpp')}</Td>
+          </Box>
+        ))}
+
+    {/*...*/}
+
+  );
+};
+
+export default SiteTable;
+
+```
+
+
+
+We can also add a new component to help us render these links to our feedback:
+
+```jsx
+// components/feedback-link.js
+
+import { Flex, Link } from '@chakra-ui/react';
+
+export default function FeedbackLink({ siteId }) {
+  return (
+    <Flex justifyContent="space-between" mb={8} width="full" mt={1}>
+      <Link fontWeight="bold" fontSize="sm" href={`/p/${siteId}`}>
+        Leave a comment →
+      </Link>
+      <Link fontSize="xs" color="blackAlpha.500" href="/">
+        Powered by Fast Feedback
+      </Link>
+    </Flex>
+  );
+}
+```
