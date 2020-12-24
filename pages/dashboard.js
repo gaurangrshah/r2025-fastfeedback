@@ -9,10 +9,6 @@ const Dashboard = () => {
   const auth = useAuth();
   const { data } = useSWR('/api/sites', fetcher);
 
-  // ❌ if (!auth.user) {
-  //   return <SiteTableSkeleton />;
-  // }
-
   if (!data) {
     <DashboardShell>
       <EmptyState />
@@ -21,8 +17,7 @@ const Dashboard = () => {
 
   return (
     <DashboardShell>
-      {/* ❌ {data?.sites ? <SiteTable sites={data.sites} /> : <EmptyState />} */}
-      {data?.sites ? <SiteTable sites={data.sites.sites} /> : <EmptyState />}
+      {data?.sites ? <SiteTable sites={data.sites} /> : <EmptyState />}
     </DashboardShell>
   );
 };

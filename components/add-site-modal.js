@@ -29,14 +29,12 @@ const AddSiteModal = ({children}) => {
   const { handleSubmit, register } = useForm();
 
   const onCreateSite = ({ name, url }) => {
-    // ❌ const onCreateSite = (values) => {
     const newSite = {
        authorId: auth.user.uid,
        createdAt: new Date().toISOString(),
        name,
        url
      };
-    //    createSite(values);
     createSite({
       // setup initialized fields author and date:
       authorId: auth.user.uid,
