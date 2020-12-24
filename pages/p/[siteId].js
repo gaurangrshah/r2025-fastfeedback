@@ -16,7 +16,7 @@ export async function getStaticProps(context) {
       initialFeedback: feedback, // pass feedback from firestore as props to page component
     },
     // allows for incremental static regeneration
-    unstable_revalidate: 1 // -- update every second
+    revalidate: 1 // -- update every second
   };
 }
 
