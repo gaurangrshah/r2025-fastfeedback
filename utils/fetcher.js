@@ -1,5 +1,4 @@
 export default async function fetcher(url, token) {
-  // ❌  const res = await fetch(...args);
   const res = await fetch(url, {
     method: 'GET',
     // include token from request with headers

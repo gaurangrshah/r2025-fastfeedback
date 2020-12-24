@@ -6,7 +6,6 @@ import DashboardShell from '@/components/dashboard-shell';
 import fetcher from '@/utils/fetcher';
 
 const Dashboard = () => {
-  // ❌ const auth = useAuth();
   const { user } = useAuth();
   // use token to authenticate for our request
   const { data } = useSWR(user ? ['/api/sites', user.token] : null, fetcher);
