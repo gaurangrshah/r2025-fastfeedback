@@ -55,7 +55,8 @@ const AddSiteModal = ({children}) => {
     // used to refetch queries after updates
     mutate(
       // refetch the cached sites
-      '/api/sites',
+      // ❌ '/api/sites',
+      ['/api/sites', auth.user.token],
       async (data) => {
         // take the cached sites and manually update with newSite
         return { sites: [...data.sites, newSite] };

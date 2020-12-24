@@ -2035,3 +2035,389 @@ export default function FeedbackLink({ siteId }) {
   );
 }
 ```
+
+
+
+
+
+## Authenticated API Routes with Firebase
+
+In this section our goal is to lock down our api routes allowing authenticated users access to their own site, and locking access to any other site in the application. 
+
+
+
+> Before getting started there are a few minor updates to the application:
+>
+> ```jsx
+> // pages/index.js
+> 
+> 
+> const Home = () => {
+>   const auth = useAuth(); // import auth from our custom hook
+> 
+>   return (
+>     <Flex
+>       as="main"
+>       direction="column"
+>       mx="auto"
+>       align="center"
+>       justify="center"
+>       flex={1}
+>       maxW="300px"
+>     >
+>       <Head>
+>         <title>Fast Feedback</title>
+>       </Head>
+>       <LogoIcon boxSize={12} fill="blue.200" />
+>       <Text mb={4}>
+>         <Text as="span" fontWeight="bold" display="inline">
+>           Fast Feedback
+>         </Text>
+>         {' is being built as part of '}
+>         <Link href="https://react2025.com" isExternal textDecoration="underline">
+>           React 2025
+>         </Link>
+>         {`. It's the easiest way to add comments or reviews to your static site. It's still a work-in-progress, but you can try it out by logging in.`}
+>       </Text>
+> 
+>       {auth?.user ? (
+>         <>
+>           <Flex justifyContent="space-between" w="full" mx="auto" mb={4}>
+>             <Text>Current user:</Text>
+>             <Code>{auth.user ? auth.user.email : 'None'}</Code>
+>           </Flex>
+>           <Flex justifyContent="space-between" w="full" mx="auto">
+>             <Button as="a" size="sm" fontWeight="medium" href="/dashboard">
+>               View Dashboard
+>             </Button>
+>             <Button size="sm" fontWeight="medium" onClick={(e) => auth.signout()}>
+>               Sign Out
+>             </Button>
+>           </Flex>
+>         </>
+>       ) : (
+>         <Button
+>           variant="link"
+>           size="sm"
+>           mt={4}
+>           size="sm"
+>           fontWeight="medium"
+>           onClick={(e) => auth.signinWithGitHub()}
+>         >
+>           Sign In
+>         </Button>
+>       )}
+>     </Flex>
+>   );
+> };
+> ```
+>
+> Here we've simply refactored for the purpose of adding some useful info about the application to the initial landing page. 
+
+
+
+### Working with JWT's
+
+Currently our rawUser includes a Json Web Token, we can take a look at it's contents by logging out our rawUser from `./lib/auth.js` and pasting. it into the playground at `www.jwt.io`
+
+![image-20201223194153343](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201223194153343.png)
+
+> As we can see above the token contains a bunch of information about our user profile, which is all encoded within it's "payload".  This allows us to use this information in order to securely communicate between the client-side of our application and our firestore server.
+
+
+
+In order to use this information in our application we'll need to add the token to our formattedUser object that we return from `./lib/auth.js`
+
+```js
+// lib/auth.js
+
+
+/*...*/
+
+
+const formatUser = (user) => {
+  return {
+    uid: user.uid,
+    email: user.email,
+    name: user.displayName,
+    token: user.ya, // include token with formatted user
+    provider: user.providerData[0].providerId,
+    photoUrl: user.photoURL,
+  };
+};
+```
+
+
+
+We can then use this in the same file to help us extract the token from the user object and save only the user details to our database while we keep the token on the user object for use within our local client-side application:
+
+```js
+// lib/auth.js
+
+/*...*/
+
+  const handleUser = (rawUser) => {
+    if (rawUser) {
+      const user = formatUser(rawUser);
+
+      // extract token from formatted user object:
+      const {token, ...userWithoutToken} = user
+
+      // sets the user from context wihtout token to firestore db
+      createUser(user.uid, userWithoutToken);
+      setUser(user); // user with token avaialble to client-side application
+      return user;
+    } else {
+      setUser(false);
+      return false;
+    }
+  };
+
+
+/*...*/
+```
+
+> This allows us to make sure we're not saving the token to the database along with the user info, and only saving the necessary user info to the database while keeping the token available to us for authenticaton purposes within our client-side application. 
+
+
+
+Using the token in our client side application to make our authenticated requests to grab our own site related to the current logged in user:
+
+```js
+// pages/dashboard.js
+
+const Dashboard = () => {
+ 
+  // ❌ const auth = useAuth();
+  const { user } = useAuth();
+
+  // use token to authenticate for our request
+  const { data } = useSWR(user ? ['/api/sites', user.token] : null, fetcher);
+ 
+/*...*/
+
+  
+}
+```
+
+
+
+Next we'll need to update the `fetcher` in order to ensure it handles our authentication logic for us:
+
+```js
+// utils/fetcher.js
+
+export default async function fetcher(...args) {
+  
+  // ❌  const res = await fetch(...args);
+  const res = await fetch(url, {
+    method: 'GET',
+    // include token from request with headers
+    headers: new Headers({ 'Content-Type': 'application/json', token }),
+    credentials: 'same-origin',
+  });
+
+  return res.json();
+}
+
+```
+
+
+
+
+Now we'll need to update our firebase-admin.js:
+
+```js
+// lib/firebase-admin.js
+
+import admin from 'firebase-admin';
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      private_key: process.env.FIREBASE_PRIVATE_KEY,
+      project_id: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    }),
+    databaseURL: 'https://fast-feedback.firebaseio.com',
+  });
+}
+
+const auth = admin.auth()
+const firestore = admin.firestore()
+// ❌ export default firestore 
+export default { auth, firestore }
+
+```
+
+
+
+Now that we've changed how our request works, we'll need to ensure our api route knows to also authenticate users before executing the request:
+
+```js
+
+import { auth } from '@/lib/firebase-admin';
+// ❌ import { getAllSites } from '@/lib/db-admin';
+import { getUserSites } from '@/lib/db-admin';
+
+// ❌ export default async (_, res) => {
+//   const { sites, error } = await getUserSites();
+//   if (error) {
+//     res.status(500).json({ error });
+//   }
+
+//   res.status(200).json({ sites });
+// };
+
+export default async (req, res) => {
+  try {
+    // get user id from token on request headers
+    const { uid } = await auth.verifyIdToken(req.headers.token);
+    // get all related sites by userId
+    const { sites } = await getUserSites(uid);
+
+    res.status(200).json({ sites });
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+};
+
+```
+
+
+
+We'll also need to update one other location where we use firebase-admin:
+
+```js
+// lib/db-admin.js
+
+import { firebase } from './firebase-admin';
+```
+
+> just needed to make sure we're destructuring firebase rather than using it as a default import.
+
+
+
+
+
+### Auto Redirect Logged-in Users
+
+If a user is already logged in we'll want to automatically re-direct them to their own dashboard where they can view their sites. This is done by setting a cookie for logged in users, and using a script to handle the redirect in our `index.js` file.
+
+
+
+First let's ensure we're setting the cookie for logged in users, and removing it for logged out users if a cookie already exists.
+
+```bash
+yarn add js-cookie
+```
+
+
+
+```js
+// lib/auth.js
+
+import cookie from 'js-cookie'; // https://tinyurl.com/8q2g5cw
+
+
+function useProvideAuth() {
+  const [user, setUser] = useState(null);
+
+  const handleUser = (rawUser) => {
+    if (rawUser) {
+
+			/*...*/
+
+      // set cookie to allow automatic logged-in redirect to dashboard
+      cookie.set('fast-feedback-auth', true, {
+				expires: 1, // expires in 1 day
+      });
+
+      return user;
+      
+    } else {
+      // remove cookie if no logged in user (on logout)
+      cookie.remove('fast-feedback-auth');
+      
+      setUser(false);
+      return false;
+    }
+  };
+
+	/*...*/
+
+}
+```
+
+
+
+Now in our index file we can include a script using the <Head> tag from `next/head`
+
+```jsx
+// pages/index.js
+
+const Home = () => {
+  const auth = useAuth(); // import auth from our custom hook
+
+  return (
+
+    {/*...*/}
+
+      <Head>
+        <script
+          
+        // automatically redirects logged in users to dashboard
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (document.cookie && document.cookie.includes('fast-feedback-auth')) {
+                window.location.href = "/dashboard"
+              }
+            `,
+
+          }}
+        />
+        <title>Fast Feedback</title>
+      </Head>
+    
+    {/*...*/}
+}
+```
+
+
+
+
+
+### Implementing Incremental Static Regeneration
+
+ISR allows us to take advantage of next.js's static regeneration to help us cache and retrieve data on the fly. The bulk of the work occurs under the hood, while we get fresh data as often as possible.  
+
+
+
+We're going to apply this to our feedback pages:
+
+```js
+// pages/p/[siteId].js
+
+export async function getStaticProps(context) {
+  const siteId = context.params.siteId;
+  // get all feedback related to siteId
+  const { feedback } = await getAllFeedback(siteId);
+  return {
+    props: {
+      initialFeedback: feedback, // pass feedback from firestore as props to page component
+    },
+    // allows for incremental static regeneration
+    unstable_revalidate: 1 // -- update every second
+  };
+}
+```
+
+> **☝️ NOTE: ** this feature takes effect in production, in development, `getStaticProps()` and `getStaticPaths()` will fire on each reload, but in production, they will only fire when there is new data available, that data will then be cached. Finally, on the next reload it becomes available and rendered to all users. 
+
+
+
+### Implement Vercel Preview 
+
+In order for the vercel preview feature to work, we'll need to add the domain: `vercel.app` to our authorized domains in firebase
+
+![image-20201224000800255](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201224000800255.png)
