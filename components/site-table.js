@@ -27,7 +27,10 @@ const SiteTable = ({ sites }) => {
             </Td>
             <Td>
               <NextLink href="/p/[siteId]" as={`/p/${site.id}`} passHref>
-                <Link>View Feedback</Link>
+                {/* ❌ <Link>View Feedback</Link> */}
+                <Link color="blue.500" fontWeight="medium">
+                  View Feedback
+                </Link>
               </NextLink>
             </Td>
             {/* used to format the date/time to a human readable string */}

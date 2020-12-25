@@ -1,6 +1,6 @@
 import Head from 'next/head';
-import {  Button, Code, Flex, Text, Icon, Link } from '@chakra-ui/react';
-import { LogoIcon } from '../styles/icons';
+import {  Button, Code, Flex, Text, Link, Stack } from '@chakra-ui/react';
+import { LogoIcon, GoogleSigninButton, GithubSigninButton } from '../styles/icons';
 import { useAuth } from '@/lib/auth';
 
 const Home = () => {
@@ -18,7 +18,7 @@ const Home = () => {
     >
       <Head>
         <script
-        // automatically redirects logged in users to dashboard
+          // automatically redirects logged in users to dashboard
           dangerouslySetInnerHTML={{
             __html: `
               if (document.cookie && document.cookie.includes('fast-feedback-auth')) {
@@ -57,16 +57,32 @@ const Home = () => {
           </Flex>
         </>
       ) : (
-        <Button
-          variant="link"
-          size="sm"
-          mt={4}
-          size="sm"
-          fontWeight="medium"
-          onClick={(e) => auth.signinWithGitHub()}
-        >
-          Sign In
-        </Button>
+        <Stack>
+          <Button
+            size="lg"
+            mt={4}
+            fontWeight="medium"
+            colorScheme="gray"
+            color="gray.900"
+            variant="outline"
+            leftIcon={<GithubSigninButton />}
+            onClick={(e) => auth.signinWithGitHub()}
+          >
+            Sign In
+          </Button>
+          <Button
+            size="lg"
+            mt={4}
+            fontWeight="medium"
+            colorScheme="gray"
+            color="gray.900"
+            variant="outline"
+            leftIcon={<GoogleSigninButton />}
+            onClick={(e) => auth.signinWithGoogle()}
+          >
+            Sign In
+          </Button>
+        </Stack>
       )}
     </Flex>
   );

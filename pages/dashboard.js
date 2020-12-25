@@ -2,6 +2,8 @@ import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
 import EmptyState from '@/components/empty-state';
 import SiteTable from '../components/site-table';
+import SiteTableSkeleton from '../components/site-table-skeleton';
+import SiteTableHeader from '../components/site-table-header';
 import DashboardShell from '@/components/dashboard-shell';
 import fetcher from '@/utils/fetcher';
 
@@ -12,12 +14,14 @@ const Dashboard = () => {
 
   if (!data) {
     <DashboardShell>
-      <EmptyState />
+      <SiteTableHeader />
+      <SiteTableSkeleton />
     </DashboardShell>;
   }
 
   return (
     <DashboardShell>
+      <SiteTableHeader />
       {data?.sites ? <SiteTable sites={data.sites} /> : <EmptyState />}
     </DashboardShell>
   );

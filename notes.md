@@ -331,6 +331,15 @@ const Home = () => {
 
 
 
+> **⚠️ NOTE:**
+>
+> When setting the environment variable for the `FIREBASE_PRIVATE_KEY`, you must remove all new-line characters `/n` and replace them with an actual carriage return
+>
+> <div style="display: flex;">
+>         <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201224004348774.png"/></div>
+>         <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201224004515805.png"/></div>
+>   </div>
+
 
 
 ### Saving Users to Database
@@ -2042,7 +2051,7 @@ export default function FeedbackLink({ siteId }) {
 
 ## Authenticated API Routes with Firebase
 
-In this section our goal is to lock down our api routes allowing authenticated users access to their own site, and locking access to any other site in the application. 
+In this section our goal is to lock down our api routes allowing authenticated users access to ONLY their own sites, and locking access to any other site in the application. 
 
 
 
@@ -2421,3 +2430,729 @@ export async function getStaticProps(context) {
 In order for the vercel preview feature to work, we'll need to add the domain: `vercel.app` to our authorized domains in firebase
 
 ![image-20201224000800255](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201224000800255.png)
+
+
+
+
+
+### Firebase Security Rules
+
+https://firebase.google.com/docs/storage/security
+
+> Google Cloud Storage lets you specify per file and per path authorization rules that live on our servers and determine access to the files in your app. For example, the default Storage Security Rules require Firebase Authentication in order to perform any `read` or `write` operations on all files:
+>
+> ```
+> service firebase.storage {
+>   match /b/{bucket}/o {
+>     match /{allPaths=**} {
+>       allow read, write: if request.auth != null;
+>     }
+>   }
+> }
+> ```
+>
+> You can edit these rules by selecting a Firebase app in [Firebase console](https://console.firebase.google.com/) and viewing the `Rules` tab of the Storage section.
+
+
+
+
+
+## User Feeback page
+
+The feedback page will be very similar to our dashboard page:
+
+```jsx
+// pages/feedback.js
+
+import useSWR from 'swr';
+
+import { useAuth } from '@/lib/auth';
+import fetcher from '@/utils/fetcher';
+import EmptyState from '@/components/empty-state';
+import DashboardShell from '@/components/dashboard-shell';
+import FeedbackTable from '@/components/feedback-table';
+import SiteTableSkeleton from '@/components/site-table-skeleton';
+
+const MyFeedback = () => {
+  const { user } = useAuth();
+  const { data } = useSWR(user ? ['/api/feedback', user.token] : null, fetcher);
+
+  if (!data) {
+    return (
+      <DashboardShell>
+        <SiteTableSkeleton />
+      </DashboardShell>
+    );
+  }
+
+  return (
+    <DashboardShell>
+      {data?.feedback ? <FeedbackTable feedback={data.feedback} /> : <EmptyState />}
+    </DashboardShell>
+  );
+};
+
+export default MyFeedback;
+```
+
+
+
+We'll also need an api route for our feedback logic, which will also be similar to our sites api:
+
+```js
+// pages/api/feedback.js
+
+import { auth } from '@/lib/firebase-admin';
+import { getUserFeedback } from '@/lib/db-admin';
+
+export default async (req, res) => {
+  try {
+    // get user id from token on request headers
+    const { uid } = await auth.verifyIdToken(req.headers.token);
+    // get all related feedback by userId
+    const { feedback } = await getUserFeedback(uid);
+
+    res.status(200).json({ feedback });
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+};
+```
+
+
+
+We'll also need a function to help us get all of the user's feedback:
+
+```js
+// lib/db-admin.js
+
+export async function getUserFeedback(userId) {
+    const snapshot = await db.collection('feedback').where('authorId', '==', uid).get();
+
+    const feedback = [];
+
+    snapshot.forEach((doc) => {
+      feedback.push({ id: doc.id, ...doc.data() });
+    });
+
+    return { feedback };
+}
+```
+
+
+
+With this in place our feedback route, should be able to be rendered:
+
+![image-20201225021034642](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225021034642.png)
+
+> **☝️ NOTE: ** currently we're displaying the author's name instead of the site name, this is because we're not actually saving the site name in our data model yet, we'll need to make that update and ensure we're saving that information when a new site is added:
+>
+> ```jsx
+> // pages/p/[siteId].js
+> 
+> const SiteFeedback = ({ initialFeedback }) => {
+> 
+>   	/*...*/
+> 
+>       const newFeedback = {
+>         // create feedback object to set new comment to database as feedback
+>         author: auth.user.name,
+>         authorId: auth.user.uid,
+>         siteId: router.query.siteId,
+>         text: inputEl.current.value,
+>         createdAt: new Date().toISOString(),
+>         provider: auth.user.provider,
+>         status: 'pending',
+>       };
+> 
+>     	/*...*/
+>       
+>     };
+> 
+>   return (
+> 
+>     /*...*/
+>     
+>   );
+> };
+> 
+> export default SiteFeedback;
+> ```
+>
+> 
+
+
+
+### Refactor Table Headers
+
+We're re-using our dashboard shell component here, and will need to modify it to allow us to change it's header from "sites" to "feedback" to do this we'll be refactoring some of it:
+
+> ```jsx
+> // components/dashboard-shell.js
+> 
+> 
+> import { useAuth } from '@/lib/auth';
+> 
+> 
+> const DashboardShell = ({ children }) => {
+>   const { user, signout } = useAuth();
+> 
+>   return (
+>     <Box backgroundColor="gray.100" h="100vh">
+>       <Flex backgroundColor="white" mb={16} w="full">
+>         <Flex
+>           alignItems="center"
+>           justifyContent="space-between"
+>           pt={4}
+>           pb={4}
+>           maxW="1250px"
+>           margin="0 auto"
+>           w="full"
+>           px={8}
+>           h="70px"
+>         >
+>           <Flex align="center">
+>             <NextLink href="/" passHref>
+>               <Link>
+>                 <LogoIcon name="logo" boxSize={8} mr={8} />
+>               </Link>
+>             </NextLink>
+> 
+>             {/* ❌ <Link mr={4}>Sites</Link>
+>             <Link>Feedback</Link> */}
+> 
+>             <NextLink href="/dashboard" passHref>
+>               <Link mr={4}>Sites</Link>
+>             </NextLink>
+>             <NextLink href="/feedback" passHref>
+>               <Link>Feedback</Link>
+>             </NextLink>
+> 
+>           </Flex>
+>           <Flex justifyContent="center" alignItems="center">
+>             {user && (
+>               <Button variant="ghost" mr={2} onClick={() => signout()}>
+>                 Log Out
+>               </Button>
+>             )}
+>             <Avatar size="sm" src={user?.photoUrl} />
+>           </Flex>
+>         </Flex>
+>       </Flex>
+>       <Flex margin="0 auto" direction="column" maxW="1250px" px={8}>
+>         {/* ❌ <Breadcrumb>
+>           <BreadcrumbItem>
+>             <BreadcrumbLink>Sites</BreadcrumbLink>
+>           </BreadcrumbItem>
+>         </Breadcrumb>
+>         <Flex justifyContent="space-between">
+>           <Heading mb={8}>My Sites</Heading>
+>           <AddSiteModal>+ Add Site</AddSiteModal>
+>         </Flex> */}
+>         {children}
+>       </Flex>
+>     </Box>
+>   );
+> };
+> 
+> export default DashboardShell;
+> ```
+>
+> 
+>
+> we've extracted the breadcrumbs and the table header into it's own component:
+>
+>
+> ```jsx
+> // components/site-table-header.js
+> 
+> import React from 'react';
+> import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, Heading, Flex } from '@chakra-ui/react';
+> 
+> const SiteTableHeader = () => {
+>   return (
+>     <>
+>       <Breadcrumb>
+>         <BreadcrumbItem>
+>           <BreadcrumbLink>Sites</BreadcrumbLink>
+>         </BreadcrumbItem>
+>       </Breadcrumb>
+>       <Flex justifyContent="space-between">
+>         <Heading mb={8}>My Sites</Heading>
+>         <AddSiteModal>+ Add Site</AddSiteModal>
+>       </Flex>
+>     </>
+>   );
+> };
+> 
+> export default SiteTableHeader;
+> 
+> ```
+>
+> 
+>
+> And we're simply rendering the extracted table-header component on our dashboard:
+>
+> ```jsx
+> // pages/dashboard.js
+> 
+> import SiteTableHeader from '../components/site-table-header';
+> 
+> const Dashboard = () => {
+> 
+> 	/*...*/
+> 
+>   if (!data) {
+>     <DashboardShell>
+>       
+>       <SiteTableHeader /> 	{/* add extracted table-header */}
+>       
+>       <SiteTableSkeleton />
+>     </DashboardShell>;
+>   }
+> 
+>   return (
+>     <DashboardShell>
+>       <SiteTableHeader /> {/* add extracted table-header */}
+>       
+>       {data?.sites ? <SiteTable sites={data.sites} /> : <EmptyState />}
+>     </DashboardShell>
+>   );
+> };
+> ```
+>
+> 
+>
+> While we're refactoring we'll also went to make a small asthetic change to our site-table component where we render the feedback link, just to make it more pronounced as a link:
+>
+> ```jsx
+> const SiteTable = ({ sites }) => {
+>   return (
+>     <Table>
+>       
+>       {/*...*/}
+>       
+>       <tbody>
+>         {sites.map((site) => (
+>           <Box as="tr" key={site.url}>
+> 
+>             {/*...*/}
+>             
+>             <Td>
+>               <NextLink href="/p/[siteId]" as={`/p/${site.id}`} passHref>
+> 
+>                 {/* ❌ <Link>View Feedback</Link> */}
+>                 <Link color="blue.500" fontWeight="medium">
+>                   View Feedback
+>                 </Link>
+>               
+>               </NextLink>
+>             </Td>
+> 
+>             {/*...*/}
+> 
+>           </Box>
+>         ))}
+>       </tbody>
+>     </Table>
+>   );
+> };
+> ```
+>
+> 
+
+
+
+Now that we have this in place we can do the same thing with our a similar header for the feedback page route:
+
+```jsx
+// components/feedback-table-header.js
+
+import React from 'react';
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, Heading, Flex } from '@chakra-ui/react';
+
+const FeedbackTableHeader = () => (
+  <>
+    <Breadcrumb>
+      <BreadcrumbItem>
+        <BreadcrumbLink>Feedback</BreadcrumbLink>
+      </BreadcrumbItem>
+    </Breadcrumb>
+    <Flex justifyContent="space-between">
+      <Heading mb={8}>My Feedback</Heading>
+    </Flex>
+  </>
+);
+
+export default FeedbackTableHeader;
+```
+
+
+
+And we'll also do something similar for our feedback skeleton component rather than re-using our site-skeleton:
+
+```jsx
+// components/feedback-table-skeleton.js
+
+import React from 'react';
+import { Box, Skeleton } from '@chakra-ui/react';
+import { Table, Tr, Th, Td } from './table';
+
+const SkeletonRow = ({ width }) => (
+  <Box as="tr">
+    <Td>
+      <Skeleton height="10px" w={width} my={4} />
+    </Td>
+    <Td>
+      <Skeleton height="10px" w={width} my={4} />
+    </Td>
+    <Td>
+      <Skeleton height="10px" w={width} my={4} />
+    </Td>
+    <Td>
+      <Skeleton height="10px" w={width} my={4} />
+    </Td>
+  </Box>
+);
+
+const FeedbackTableSkeleton = () => {
+  return (
+    <Table>
+      <thead>
+        <Tr>
+          <Th>Name</Th>
+          <Th>Feedback</Th>
+          <Th>Route</Th>
+          <Th>Visible</Th>
+          <Th width="50px">{''}</Th>
+        </Tr>
+      </thead>
+      <tbody>
+        <SkeletonRow width="75px" />
+        <SkeletonRow width="125px" />
+        <SkeletonRow width="50px" />
+        <SkeletonRow width="100px" />
+        <SkeletonRow width="75px" />
+      </tbody>
+    </Table>
+  );
+};
+
+export default FeedbackTableSkeleton;
+```
+
+
+
+
+
+We'll also be creating a feedback-table similar to our site-table component:
+
+```jsx
+// components/feedback-table.js
+
+import { Code, Box } from '@chakra-ui/react';
+import { Table, Tr, Th, Td } from './table';
+import DeleteFeedbackButton from './delete-feedback-button';
+
+const FeedbackTable = (props) => {
+  return (
+    <Table>
+      <thead>
+        <Tr>
+          <Th>Name</Th>
+          <Th>Feedback</Th>
+          <Th>Route</Th>
+          <Th>Visible</Th>
+          <Th width="50px">{''}</Th>
+        </Tr>
+      </thead>
+      <tbody>
+        {props.feedback.map((feedback) => (
+          <Box as="tr" key={feedback.id}>
+            <Td fontWeight="medium">{feedback.author}</Td>
+            <Td>{feedback.text}</Td>
+            <Td>
+              <Code>{`/`}</Code>
+            </Td>
+            
+            {/* Adds switch element to toggle visiblity */}
+            <Td><Switch colorScheme="green" defaultIsChecked={feedback.status === 'active'}/></Td>
+            
+            {/* ❌ <Td>{'Remove'}</Td> */}
+            
+            <DeleteFeedbackButton feedbackId={feedback.id} />
+            
+          </Box>
+        ))}
+      </tbody>
+    </Table>
+  );
+};
+
+export default FeedbackTable;
+```
+
+> **☝️ NOTE: ** we've manually changed the status of a few feedback comments to 'active' just to ensure this logic works - in our firestore database 
+>
+> ![image-20201225024144594](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225024144594.png)
+
+
+
+We're using a delete feedback button, so we'll need to create a button for this to handle the delete logic, and the associated functions for it:
+
+```jsx
+// components/delete-feedback-button.js
+
+import React, { useState, useRef } from 'react';
+import { mutate } from 'swr';
+import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
+  IconButton,
+  Button,
+} from '@chakra-ui/react';
+import { DeleteIcon } from '@chakra-ui/icons';
+
+import { deleteFeedback } from '@/lib/db';
+import { useAuth } from '@/lib/auth';
+
+const DeleteFeedbackButton = ({ feedbackId }) => {
+  const [isOpen, setIsOpen] = useState();
+  const cancelRef = useRef();
+  const auth = useAuth();
+
+  const onClose = () => setIsOpen(false);
+  const onDelete = () => {
+    deleteFeedback(feedbackId);
+    mutate(
+      ['/api/feedback', auth.user.token],
+      async (data) => {
+        return {
+    // manually remove the deleted feedback from client-side while updating cache
+          feedback: data.feedback.filter((feedback) => feedback.id !== feedbackId),
+        };
+      },
+      false
+    );
+    onClose();
+  };
+
+  return (
+    <>
+      <IconButton
+        aria-label="Delete feedback"
+        icon={<DeleteIcon/>}
+        variant="ghost"
+        onClick={() => setIsOpen(true)}
+      />
+      <AlertDialog isOpen={isOpen} leastDestructiveRef={cancelRef} onClose={onClose}>
+        <AlertDialogOverlay />
+        <AlertDialogContent>
+          <AlertDialogHeader fontSize="lg" fontWeight="bold">
+            Delete Feedback
+          </AlertDialogHeader>
+          <AlertDialogBody>Are you sure? You can't undo this action afterwards.</AlertDialogBody>
+          <AlertDialogFooter>
+            <Button ref={cancelRef} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button colorScheme="red" onClick={onDelete} ml={3}>
+              Delete
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+};
+
+export default DeleteFeedbackButton;
+```
+
+
+
+Now we'll need to make sure we have a function that handles the delete from our client-side firestore database:
+
+```js
+// lib/db.js
+
+export function deleteFeedback(id) {
+  // allows user to remove feedback
+  return firestore.collection('feedback').doc(id).delete();
+}
+```
+
+
+
+Now we can use the newly created table-header and table-skeleton components for our feedback page:
+
+```jsx
+// pages/feedback.js
+
+import FeedbackTable from '@/components/feedback-table';
+import FeedbackTableHeader from '@/components/feedback-table-header';
+import FeedbackTableSkeleton from '@/components/feedback-table-skeleton';
+
+const MyFeedback = () => {
+  const { user } = useAuth();
+  const { data } = useSWR(user ? ['/api/feedback', user.token] : null, fetcher);
+
+  if (!data) {
+    return (
+      <DashboardShell>
+        <FeedbackTableHeader />
+        <FeedbackTableSkeleton />
+      </DashboardShell>
+    );
+  }
+
+  return (
+    <DashboardShell>
+      <FeedbackTableHeader />
+      {data?.feedback ? <FeedbackTable feedback={data.feedback} /> : <EmptyState />}
+    </DashboardShell>
+  );
+};
+
+export default MyFeedback;
+```
+
+
+
+With this all in place we have the basic structure and logic for our feeback table:
+
+![image-20201225031556158](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225031556158.png)
+
+
+
+
+
+### Sign-in with Google
+
+we currently have the ability to login via GitHub, and we'll want to add the option to use google as well:
+
+```js
+// lib/auth.js
+
+function useProvideAuth() {
+
+	/*...*/
+  
+  const signinWithGoogle = () => {
+    return firebase
+      .auth()
+      .signInWithPopup(new firebase.auth.GoogleAuthProvider())
+      .then((response) => handleUser(response.user));
+  };
+
+  /*...*/
+  
+    return {
+    user,
+    signinWithGitHub,
+    signinWithGoogle, // add google signin to return statement
+    signout,
+  };
+}
+
+
+```
+
+
+
+```jsx
+// pages/index.js
+
+import { LogoIcon, GoogleSigninButton, GithubSigninButton } from '../styles/icons';
+const Home = () => {
+	{/*...*/}
+
+        <Stack>
+          <Button
+            size="lg"
+            mt={4}
+            fontWeight="medium"
+            colorScheme="gray"
+            color="gray.900"
+            variant="outline"
+            leftIcon={<GoogleSigninButton />}
+            onClick={(e) => auth.signinWithGitHub()}
+          >
+            Sign In
+          </Button>
+          <Button
+            size="lg"
+            mt={4}
+            fontWeight="medium"
+            colorScheme="gray"
+            color="gray.900"
+            variant="outline"
+            leftIcon={<GithubSigninButton />}
+            onClick={(e) => auth.signinWithGoogle()}
+          >
+            Sign In
+          </Button>
+        </Stack>
+  
+  {/*...*/}
+}
+```
+
+
+
+We're using new signin buttons for both google and github to give the user a choice, and we can implement the buttons like this:
+
+```jsx
+// styles/icons.js
+
+export const GoogleSigninButton = (props) => {
+  return (
+    <Icon viewBox="0 0 533.5 544.3" {...props}>
+      <path
+        d="M533.5 278.4c0-18.5-1.5-37.1-4.7-55.3H272.1v104.8h147c-6.1 33.8-25.7 63.7-54.4 82.7v68h87.7c51.5-47.4 81.1-117.4 81.1-200.2z"
+        fill="#4285f4"
+      />
+      <path
+        d="M272.1 544.3c73.4 0 135.3-24.1 180.4-65.7l-87.7-68c-24.4 16.6-55.9 26-92.6 26-71 0-131.2-47.9-152.8-112.3H28.9v70.1c46.2 91.9 140.3 149.9 243.2 149.9z"
+        fill="#34a853"
+      />
+      <path
+        d="M119.3 324.3c-11.4-33.8-11.4-70.4 0-104.2V150H28.9c-38.6 76.9-38.6 167.5 0 244.4l90.4-70.1z"
+        fill="#fbbc04"
+      />
+      <path
+        d="M272.1 107.7c38.8-.6 76.3 14 104.4 40.8l77.7-77.7C405 24.6 339.7-.8 272.1 0 169.2 0 75.1 58 28.9 150l90.4 70.1c21.5-64.5 81.8-112.4 152.8-112.4z"
+        fill="#ea4335"
+      />
+    </Icon>
+  );
+};
+
+
+export const GithubSigninButton = (props) => {
+  return (
+    <Icon
+      viewBox="0 0 533.5 544.3"
+      fill="none"
+      stroke="#000"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"{...props}
+    >
+      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" fill="#000"/>
+  </Icon>
+  )
+};
+
+```
+
+
+
+We'll also need to add the new authentication provider to our backend via firebase:
+
+![image-20201225033830278](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225033830278.png)
+
