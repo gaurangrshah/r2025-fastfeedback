@@ -2943,7 +2943,9 @@ const onCreateSite = ({ name, url }) => {
 >
 > Now after a new site is created we can click `View Feedback` and we'll be taken to the feedback page for the correct site since we have the id already available, we don't have to wait for the caching to occur on refresh.
 
-## Basic Integration Test
+
+
+## Basic Integration With Checkly
 
 We'll use a service called [`checkly`](https://github.com/checkly) to setup some integration tests, that will run on every PR to check and make sure that the site is alive.
 
@@ -2999,3 +3001,216 @@ We'll use a service called [`checkly`](https://github.com/checkly) to setup some
 8. Create a new PR to see if this runs as expected.
 
    ![image-20201225153608358](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225153608358.png)
+
+
+
+
+
+## Logging with LogFlare
+
+**☝️ NOTE: ** vercel already has some built-in real-time logs, that display any requests being made to our site currently:
+
+![image-20201225154919985](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225154919985.png)
+
+> **⚠️ NOTE: ** Although these logs are helpful, they do not persist and can only be viewed in real-time as they stream in. Which also means there is no way of querying for issues, or going back in time to uncover issues. 
+>
+>
+> This is where [`logflare`](https://logflare.app) comes in, we can have vercel send these logs to logflare in realtime, and log flare can handle the persistence for us as well as alerting. Which gives us the ability to extend vercel's default behavior. Vercel supports logflare as an integration from it's marketplace which also simplifies the setup for us:
+>
+> ![image-20201225155654400](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225155654400.png)
+>
+> Logflare uses google's [BigQuery](https://cloud.google.com/bigquery) to handle that persistence, which allows them to inexpensively store this data for us, which means in the long run if/when we want to upgrade you won't have to pay for pricing dictated by AWS. 
+
+
+
+
+
+### Integrating LogFlare with Vercel
+
+From the [marketplace](https://vercel.com/integrations/logflare) we can simply click the add button to get started.
+
+<div style="display: flex;">
+  <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225155817536.png" /></div>
+  <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225155837700.png" /></div>
+  <div><img src="" /></div>
+  </div>
+
+Which will then allow us to setup a logflare account:
+
+<div style="display: flex;">
+  <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225160004979.png" /></div>
+  <div><img src="https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225160057238.png" /></div>
+  <div><img src="" /></div>
+</div>
+
+Once we've logged into logflare, we can name our application and authorize logflare:
+
+![image-20201225160514046](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225160514046.png)
+
+
+
+This will pull up our vercel dashboard and it tells us that we do not have any log drains yet. 
+
+![image-20201225160617272](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225160617272.png)
+
+
+
+So next we can `Create a Drain` for our logs (a log drain basically means that vercel will be draining it's logs into our logflare drain):
+
+![image-20201225161024512](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225161024512.png)
+
+Which if successful will look something like this:
+
+![image-20201225161126135](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225161126135.png)
+
+We can also see this working in our logflare dashboard:
+
+![image-20201225161230425](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225161230425.png)
+
+And we can see incoming requests being logged:
+
+![image-20201225161330475](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225161330475.png)
+
+
+
+### Setup custom Pino logger
+
+Under the hood logflare uses a popular logging schema wrapper library called [pino](https://www.npmjs.com/package/pino). Pino calls itself a "super fast logger for node.js" in actuality what it does is allows us to easily send and log structured json data. In our use-case it allows us to use a single configuration to send logs from both the server and client side of our application. 
+
+On the server-side it'll use the pino-logger to send logs from our vercel log drain, and on the client side we can create a post request to send over the logs manually. 
+
+
+
+Dependencies:
+
+```bash
+yarn add pino pino-logflare
+```
+
+
+
+We'll also need to setup our logflare api key and stream:
+
+```bash
+NEXT_PUBLIC_LOGFLARE_KEY=
+NEXT_PUBLIC_LOGFLARE_STREAM=
+```
+
+> the logflare `api key` and stream `sourceToken` is available from the logflare [dashboard](https://logflare.app/dashboard): 
+>
+> ![image-20201225165002482](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225165002482.png)
+
+
+
+Server-side:
+
+```js
+// utils/logger.js
+
+import pino from 'pino';
+ import { logflarePinoVercel } from 'pino-logflare';
+
+ const { stream, send } = logflarePinoVercel({
+   apiKey: process.env.NEXT_PUBLIC_LOGFLARE_KEY,
+   sourceToken: process.env.NEXT_PUBLIC_LOGFLARE_STREAM
+ });
+
+ const logger = pino(
+   {
+     browser: {
+       transmit: {
+         send: send
+       }
+     },
+     level: 'debug',
+     base: {
+       env: process.env.NODE_ENV || 'ENV not set',
+       revision: process.env.VERCEL_GITHUB_COMMIT_SHA
+     }
+   },
+   stream
+ );
+
+ const formatObjectKeys = (headers) => {
+   const keyValues = {};
+
+   Object.keys(headers).map((key) => {
+     const newKey = key.replace(/-/g, '_');
+     keyValues[newKey] = headers[key];
+   });
+
+   return keyValues;
+ };
+
+ export { logger, formatObjectKeys };
+```
+
+
+
+Now we can use this logger on the client side to log any errors that may occur from our apis:
+
+Client-side:
+
+```js
+// pages/api/sites.js
+
+import { logger, formatObjectKeys } from '@/utils/logger';
+
+export default async (req, res) => {
+  try {
+    const { uid } = await auth.verifyIdToken(req.headers.token);
+    const { sites } = await getUserSites(uid);
+
+    res.status(200).json({ sites });
+  } catch (error) {
+    logger.error(
+      {
+        request: {
+          headers: formatObjectKeys(req.headers),
+          url: req.url,
+          method: req.method
+        },
+        response: {
+          statusCode: res.statusCode
+        }
+      },
+      error.message
+    );
+
+    res.status(500).json({ error });
+  }
+};
+```
+
+```js
+// pages/api/feedback.js
+
+import { auth } from '@/lib/firebase-admin';
+import { getUserFeedback } from '@/lib/db-admin';
+import { logger, formatObjectKeys } from '@/utils/logger';
+
+export default async (req, res) => {
+  try {
+    const { uid } = await auth.verifyIdToken(req.headers.token);
+    const { feedback } = await getUserFeedback(uid);
+
+    res.status(200).json({ feedback });
+  } catch (error) {
+    logger.error(
+      {
+        request: {
+          headers: formatObjectKeys(req.headers),
+          url: req.url,
+          method: req.method
+        },
+        response: {
+          statusCode: res.statusCode
+        }
+      },
+      error.message
+    );
+
+    res.status(500).json({ error });
+  }
+};
+```
