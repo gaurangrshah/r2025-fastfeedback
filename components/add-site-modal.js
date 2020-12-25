@@ -35,18 +35,9 @@ const AddSiteModal = ({children}) => {
        name,
        url
      };
-    // ❌ createSite({
-    //   // setup initialized fields author and date:
-    //   authorId: auth.user.uid,
-    //   createdAt: new Date().toISOString(),
-    //   // add user input fields:
-    //   name,
-    //   url,
-    // });
 
     // destructure the new created siteId to use for optimistic-ui
     const { id } = createSite(newSite)
-
 
     // adds toast success response
     toast({
@@ -60,10 +51,6 @@ const AddSiteModal = ({children}) => {
     mutate(
       // refetch the cached sites
       ['/api/sites', auth.user.token],
-      // ❌ async (data) => {
-      //   return { sites: [...data.sites, newSite] };
-      // },
-
       async (data) => (
         // take the cached sites and manually update with newSite and add site's Id
         { sites: [...data.sites, {id, ...newSite}] }
