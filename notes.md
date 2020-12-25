@@ -2998,4 +2998,4 @@ We'll use a service called [`checkly`](https://github.com/checkly) to setup some
 
 8. Create a new PR to see if this runs as expected.
 
-[source](https://blog.checklyhq.com/easy-automated-e2e-testing-monitoring-for-your-frontend-with-vercel-and-checkly-3/)
+   ![image-20201225153608358](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225153608358.png)
