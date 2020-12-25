@@ -3156,3 +3156,128 @@ We'll also need to add the new authentication provider to our backend via fireba
 
 ![image-20201225033830278](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225033830278.png)
 
+
+
+
+
+## Squashing Bugs
+
+### Handle Redirect After Sigin / Signout
+
+```js
+// lib/auth.js
+
+import Router from 'next/router';
+
+function useProvideAuth() {
+
+	/*...*/
+  
+    const signinWithGitHub = () => {
+
+    Router.push('/dashboard'); // redirect user on authentication
+
+    return firebase
+      .auth()
+      .signInWithPopup(new firebase.auth.GithubAuthProvider())
+      .then((response) => handleUser(response.user));
+  };
+
+  const signinWithGoogle = () => {
+
+    Router.push('/dashboard'); // redirect user on authentication
+
+    return firebase
+      .auth()
+      .signInWithPopup(new firebase.auth.GoogleAuthProvider())
+      .then((response) => handleUser(response.user));
+  };
+  
+  const signout = () => {
+
+    Router.push('/'); // redirect user on authentication
+
+    return firebase
+      .auth()
+      .signOut()
+      .then(() => handleUser(false));
+  };
+  
+  /*...*/
+
+}
+```
+
+
+
+
+
+### Display Site Id on Feedback Table
+
+Currently as we noted in the previous module, we are displaying the authorId, instead of the siteId, because our data model does not yet support the siteid value. We'll add support for this, and ensure that it is being set when a new site is created:
+
+```js
+// lib/db.js
+
+export function createSite(data) {
+  // sets a new table called sites
+  // ❌ return firestore.collection('sites').add(data);
+		
+    const site = firestore.collection('sites').doc(); // reference to new site
+    site.set(data); // set data from @args to properly facilitate optimistic-ui
+
+    return site;
+}
+```
+
+> Instead of directly returning the operation to add a new site, we first create a reference, that reference to our new site, which will contain the newly generated id for the site we just added. We can use this to update our cache on the client side allowing for our optimistic-ui to function as expected and maintaing it's linking ability. 
+
+
+
+```jsx
+// components/add-site-modal.js
+
+  const onCreateSite = ({ name, url }) => {
+
+		/*...*/
+    
+        // ❌ createSite({
+    //   // setup initialized fields author and date:
+    //   authorId: auth.user.uid,
+    //   createdAt: new Date().toISOString(),
+    //   // add user input fields:
+    //   name,
+    //   url,
+    // });
+
+    // destructure the new created siteId to use for optimistic-ui
+    const { id } = createSite(newSite)
+    
+    /*...*/
+
+    mutate(
+      // refetch the cached sites
+      ['/api/sites', auth.user.token],
+      
+      
+      // ❌ async (data) => {
+      //   return { sites: [...data.sites, newSite] };
+      // },
+      
+			async (data) => (
+        // take the cached sites and manually update with newSite and add siteId
+        { sites: [...data.sites, {id, ...newSite}] }
+      ),
+     
+      false
+    );
+    
+    /*...*/
+  }
+```
+
+> **☝️ NOTE: ** we've grabbed the id from the newly created site, to allow us to update our cache which means our UI will function as we expect so we can still link to each individual feedback page since we now have a reference to the newly created site's id.
+>
+>
+> Now after a new site is created we can click `View Feedback` and we'll be taken to the feedback page for the correct site since we have the id already available, we don't have to wait for the caching to occur on refresh. 
+
