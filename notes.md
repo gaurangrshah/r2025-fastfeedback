@@ -3156,3 +3156,197 @@ We'll also need to add the new authentication provider to our backend via fireba
 
 ![image-20201225033830278](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225033830278.png)
 
+
+
+
+
+### Handle Redirect After Sigin / Signout
+
+```js
+// lib/auth.js
+
+import Router from 'next/router';
+
+function useProvideAuth() {
+
+	/*...*/
+  
+    const signinWithGitHub = () => {
+
+    Router.push('/dashboard'); // redirect user on authentication
+
+    return firebase
+      .auth()
+      .signInWithPopup(new firebase.auth.GithubAuthProvider())
+      .then((response) => handleUser(response.user));
+  };
+
+  const signinWithGoogle = () => {
+
+    Router.push('/dashboard'); // redirect user on authentication
+
+    return firebase
+      .auth()
+      .signInWithPopup(new firebase.auth.GoogleAuthProvider())
+      .then((response) => handleUser(response.user));
+  };
+  
+  const signout = () => {
+
+    Router.push('/'); // redirect user on authentication
+
+    return firebase
+      .auth()
+      .signOut()
+      .then(() => handleUser(false));
+  };
+  
+  /*...*/
+
+}
+```
+
+
+
+### Optimistic-UI For /sites
+
+Currently as we noted in the previous module, we are displaying the authorId, instead of the siteId, because our data model does not yet support the siteid value. We'll add support for this, and ensure that it is being set when a new site is created:
+
+```js
+// lib/db.js
+
+export function createSite(data) {
+  // sets a new table called sites
+  // ❌ return firestore.collection('sites').add(data);
+		
+    const site = firestore.collection('sites').doc(); // reference to new site
+    site.set(data); // set data from @args to properly facilitate optimistic-ui
+
+    return site;
+}
+```
+
+> Instead of directly returning the operation to add a new site, we first create a reference, that reference to our new site, which will contain the newly generated id for the site we just added. We can use this to update our cache on the client side allowing for our optimistic-ui to function as expected and maintaing it's linking ability. 
+
+
+
+```jsx
+// components/add-site-modal.js
+
+  const onCreateSite = ({ name, url }) => {
+
+		/*...*/
+    
+        // ❌ createSite({
+    //   // setup initialized fields author and date:
+    //   authorId: auth.user.uid,
+    //   createdAt: new Date().toISOString(),
+    //   // add user input fields:
+    //   name,
+    //   url,
+    // });
+
+    // destructure the new created siteId to use for optimistic-ui
+    const { id } = createSite(newSite)
+    
+    /*...*/
+
+    mutate(
+      // refetch the cached sites
+      ['/api/sites', auth.user.token],
+      
+      
+      // ❌ async (data) => {
+      //   return { sites: [...data.sites, newSite] };
+      // },
+      
+			async (data) => (
+        // take the cached sites and manually update with newSite and add siteId
+        { sites: [...data.sites, {id, ...newSite}] }
+      ),
+     
+      false
+    );
+    
+    /*...*/
+  }
+```
+
+> **☝️ NOTE: ** we've grabbed the id from the newly created site, to allow us to update our cache which means our UI will function as we expect so we can still link to each individual feedback page since we now have a reference to the newly created site's id.
+>
+>
+> Now after a new site is created we can click `View Feedback` and we'll be taken to the feedback page for the correct site since we have the id already available, we don't have to wait for the caching to occur on refresh. 
+
+
+
+
+
+## Basic Integration Test
+
+We'll use a service called [`checkly`](https://github.com/checkly) to setup some integration tests, that will run on every PR to check and make sure that the site is alive. 
+
+1. Setup an Account with  [`checkly`](https://github.com/checkly). 
+
+2. Grab the URL of your site: https://react2025.gshah2020.vercel.app
+
+3. To activate Checkly's [GitHub Deployments integration](https://www.checklyhq.com/docs/cicd/github/), click on your user profile and select the Integrations tab, then choose the GitHub account you want to link.
+
+   ![image-20201225151847069](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225151847069.png)
+
+   
+
+4. Now we can proceed and write our first check. For our very basic blog, we will [start with a Browser check](https://www.checklyhq.com/docs/browser-checks/).
+
+   ![image-20201225151955174](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225151955174.png)
+
+   > **⚠️ NOTE: ** we've added our first check using the updated code above:
+   >
+   > ```js
+   > const assert = require("chai").assert;
+   > const puppeteer = require("puppeteer");
+   > 
+   > const browser = await puppeteer.launch();
+   > const page = await browser.newPage();
+   > await page.goto("https://react2025.gshah2020.vercel.app/");
+   > const title = await page.title();
+   > 
+   > assert.equal(title, "Fast Feedback");
+   > await browser.close();
+   > ```
+   >
+   > - We can then run the check and get our results:
+   >
+   >   ![image-20201225152138358](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225152138358.png)
+   >
+   >   This was a simple browser check that just tests that our site is being display, to be more specific it tests whether or not our site title is equal to `Fast Feedback`
+   >
+   >   ☝️ For more complex tests you can check out the [examples](https://github.com/checkly/puppeteer-examples)
+
+   
+
+5. From the locations and scheduling tab we can setup where we want to test from and how often we'd like this test to run:
+
+   ![image-20201225152509305](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225152509305.png)
+
+   
+
+6. From the CI/CD tab we can link to our github repo for this project:
+
+   ![image-20201225152551105](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225152551105.png)
+
+   ![image-20201225152617735](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225152617735.png)
+
+   
+
+7. Configure the CI/CD pipeline and `Save Check`
+
+   ![image-20201225153305145](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201225153305145.png)
+
+8. Create a new PR to see if this runs as expected.
+
+   
+
+   
+
+[source](https://blog.checklyhq.com/easy-automated-e2e-testing-monitoring-for-your-frontend-with-vercel-and-checkly-3/)
+
