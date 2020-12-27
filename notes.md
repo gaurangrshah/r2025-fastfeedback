@@ -3322,3 +3322,21 @@ const Home = ({allFeedback}) => {
 
 
 
+```jsx
+// components/dashboard-shell.js
+
+<Button onClick={user?.uid && signout}>
+  <Avatar size="sm" src={user?.photoUrl}/>
+</Button>
+```
+
+
+
+
+
+## Setup Stripe payments
+
+With a recent firebase update we can now integrate firebase with stripe to allow us to accept subscriptions via stripe. 
+
+
+

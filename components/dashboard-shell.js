@@ -15,7 +15,6 @@ import { useAuth } from '@/lib/auth';
 
 const DashboardShell = ({ children }) => {
   const { user, signout } = useAuth();
-
   return (
     <Box backgroundColor="gray.100" h="100vh">
       <Flex backgroundColor="white" mb={16} w="full" borderTop="5px solid #0AF5F4">
@@ -46,12 +45,14 @@ const DashboardShell = ({ children }) => {
           <Flex justifyContent="center" alignItems="center">
             {user && (
               <NextLink href="/account" passHref>
-                 <Button as="a" variant="ghost" mr={2}  onClick={() => signout()}>
-                   Logout
-                 </Button>
-               </NextLink>
+                <Button as="a" variant="ghost" mr={2}>
+                  Account
+                </Button>
+              </NextLink>
             )}
-            <Avatar size="sm" src={user?.photoUrl} />
+            <Button onClick={user?.uid && signout}>
+              <Avatar size="sm" src={user?.photoUrl}/>
+            </Button>
           </Flex>
         </Flex>
       </Flex>
