@@ -1,6 +1,6 @@
-import {useRef, useState} from 'react'
+import { useRef, useState } from 'react';
 import { Box, FormControl, FormLabel, Input, Button } from '@chakra-ui/react';
-import {useRouter} from 'next/router'
+import { useRouter } from 'next/router';
 
 import { getAllFeedback, getAllSites } from '@/lib/db-admin';
 import { createFeedback } from '@/lib/db';
@@ -16,7 +16,7 @@ export async function getStaticProps(context) {
       initialFeedback: feedback, // pass feedback from firestore as props to page component
     },
     // allows for incremental static regeneration
-    revalidate: 1 // -- update every second
+    revalidate: 1, // -- update every second
   };
 }
 
@@ -30,37 +30,38 @@ export async function getStaticPaths() {
 
   return {
     paths,
-    fallback: false,
+    // allows page to display a loading state while data is re-validated/fetched
+    fallback: true,
   };
 }
 
 const SiteFeedback = ({ initialFeedback }) => {
   // stores feedback in local state
-    const [allFeedback, setAllFeedback] = useState(initialFeedback)
+  const [allFeedback, setAllFeedback] = useState(initialFeedback);
 
-    const auth = useAuth() // used to populate the author info when submitting form
-    const router = useRouter() // used to populate siteId when submitting form
+  const auth = useAuth(); // used to populate the author info when submitting form
+  const router = useRouter(); // used to populate siteId when submitting form
 
-    const inputEl = useRef(null); // used to populate the input value when submitting form
+  const inputEl = useRef(null); // used to populate the input value when submitting form
 
-    const onSubmit = (e) => {
-      e.preventDefault();
+  const onSubmit = (e) => {
+    e.preventDefault();
 
-      const newFeedback = {
-        // create feedback object to set new comment to database as feedback
-        author: auth.user.name,
-        authorId: auth.user.uid,
-        siteId: router.query.siteId,
-        text: inputEl.current.value,
-        createdAt: new Date().toISOString(),
-        provider: auth.user.provider,
-        status: 'pending',
-      };
-
-      setAllFeedback([newFeedback, ...allFeedback]); // add new comment to local state
-      createFeedback(newFeedback); // update database
-      inputEl.current.value = ''
+    const newFeedback = {
+      // create feedback object to set new comment to database as feedback
+      author: auth.user.name,
+      authorId: auth.user.uid,
+      siteId: router.query.siteId,
+      text: inputEl.current.value,
+      createdAt: new Date().toISOString(),
+      provider: auth.user.provider,
+      status: 'pending',
     };
+
+    setAllFeedback([newFeedback, ...allFeedback]); // add new comment to local state
+    createFeedback(newFeedback); // update database
+    inputEl.current.value = '';
+  };
 
   return (
     <Box display="flex" flexDirection="column" width="full" maxWidth="700px" margin="0 auto">
@@ -69,16 +70,18 @@ const SiteFeedback = ({ initialFeedback }) => {
           <FormControl my={8}>
             <FormLabel htmlFor="comment">Comment</FormLabel>
             <Input ref={inputEl} id="comment" placeholder="Leave a comment" />
-            <Button mt={4} type="submit" fontWeight="medium">
+            {/* Button isDisabled while loading in fallback state  */}
+            <Button mt={4} type="submit" fontWeight="medium" isDisabled={router.isFallback}>
               Add Comment
             </Button>
           </FormControl>
         </Box>
       )}
-      {allFeedback.map((feedback) => {
-        // renders comments from local state
-        return <Feedback key={feedback.id} {...feedback} />;
-      })}
+      {allFeedback &&
+        allFeedback.map((feedback) => {
+          // renders comments from local state
+          return <Feedback key={feedback.id} {...feedback} />;
+        })}
     </Box>
   );
 };

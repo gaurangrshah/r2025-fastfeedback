@@ -51,11 +51,10 @@ const AddSiteModal = ({children}) => {
     mutate(
       // refetch the cached sites
       ['/api/sites', auth.user.token],
-      async (data) => (
+      async (data) =>
         // take the cached sites and manually update with newSite and add site's Id
-        { sites: [...data.sites, {id, ...newSite}] }
+        ({ sites: [{ id, ...newSite }, ...data.sites] }),
         // ☝️ This allows us to use the siteid for our optimistic ui
-        ),
       false
     );
 

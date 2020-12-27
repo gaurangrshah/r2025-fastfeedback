@@ -18,7 +18,7 @@ const DashboardShell = ({ children }) => {
 
   return (
     <Box backgroundColor="gray.100" h="100vh">
-      <Flex backgroundColor="white" mb={16} w="full">
+      <Flex backgroundColor="white" mb={16} w="full" borderTop="5px solid #0AF5F4">
         <Flex
           alignItems="center"
           justifyContent="space-between"
@@ -36,38 +36,26 @@ const DashboardShell = ({ children }) => {
                 <LogoIcon name="logo" boxSize={8} mr={8} />
               </Link>
             </NextLink>
-
-            {/* ❌ <Link mr={4}>Sites</Link>
-            <Link>Feedback</Link> */}
-
             <NextLink href="/dashboard" passHref>
               <Link mr={4}>Sites</Link>
             </NextLink>
             <NextLink href="/feedback" passHref>
               <Link>Feedback</Link>
             </NextLink>
-
           </Flex>
           <Flex justifyContent="center" alignItems="center">
             {user && (
-              <Button variant="ghost" mr={2} onClick={() => signout()}>
-                Log Out
-              </Button>
+              <NextLink href="/account" passHref>
+                 <Button as="a" variant="ghost" mr={2}  onClick={() => signout()}>
+                   Logout
+                 </Button>
+               </NextLink>
             )}
             <Avatar size="sm" src={user?.photoUrl} />
           </Flex>
         </Flex>
       </Flex>
       <Flex margin="0 auto" direction="column" maxW="1250px" px={8}>
-        {/* ❌ <Breadcrumb>
-          <BreadcrumbItem>
-            <BreadcrumbLink>Sites</BreadcrumbLink>
-          </BreadcrumbItem>
-        </Breadcrumb>
-        <Flex justifyContent="space-between">
-          <Heading mb={8}>My Sites</Heading>
-          <AddSiteModal>+ Add Site</AddSiteModal>
-        </Flex> */}
         {children}
       </Flex>
     </Box>

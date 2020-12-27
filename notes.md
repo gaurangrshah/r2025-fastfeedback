@@ -2184,11 +2184,11 @@ https://firebase.google.com/docs/storage/security
 >
 > ```
 > service firebase.storage {
->   match /b/{bucket}/o {
->     match /{allPaths=**} {
->       allow read, write: if request.auth != null;
+>     match /b/{bucket}/o {
+>       match /{allPaths=**} {
+>         allow read, write: if request.auth != null;
+>       }
 >     }
->   }
 > }
 > ```
 >
@@ -2280,33 +2280,68 @@ With this in place our feedback route, should be able to be rendered:
 >
 > ```jsx
 > // pages/p/[siteId].js
->
+> 
+> export async function getStaticPaths() {
+>   const { sites } = await getAllSites();
+>   const paths = sites.map((site) => ({
+>     params: {
+>       siteId: site.id.toString(),
+>     },
+>   }));
+> 
+>   return {
+>     paths,
+>     // ❌ fallback: false,
+>     // allows page to display a loading state while data is re-validated/fetched
+>     fallback: true,
+>   };
+> }
+> 
 > const SiteFeedback = ({ initialFeedback }) => {
->
->   	/*...*/
->
->       const newFeedback = {
->         // create feedback object to set new comment to database as feedback
->         author: auth.user.name,
->         authorId: auth.user.uid,
->         siteId: router.query.siteId,
->         text: inputEl.current.value,
->         createdAt: new Date().toISOString(),
->         provider: auth.user.provider,
->         status: 'pending',
->       };
->
->     	/*...*/
->
->     };
->
->   return (
->
->     /*...*/
->
->   );
+> 
+> 	/*...*/
+> 
+>    const newFeedback = {
+>      // create feedback object to set new comment to database as feedback
+>      author: auth.user.name,
+>      authorId: auth.user.uid,
+>      siteId: router.query.siteId,
+>      text: inputEl.current.value,
+>      createdAt: new Date().toISOString(),
+>      provider: auth.user.provider,
+>      status: 'pending',
+>    };
+> 
+>  	/*...*/
+> 
+>  };
+> 
+> return (
+> 
+>  {/*...*/}
+>   <Button 
+>     mt={4} 
+>     type="submit" 
+>     fontWeight="medium" 
+>     // Button disabled while loading in fallback state
+>     isDisabled={router.isFallback} 
+>    > 
+>     Add Comment
+>   </Button> 
+>  {/*...*/}
+> 
+> 	{/*❌ {allFeedback.map((feedback) => (
+>   		<Feedback key={feedback.id} {...feedback} />
+>    ))}*/}
+>   
+> 	{allFeedback && // only if feedback exists (fetch is successful) then render:
+>     allFeedback.map((feedback) => {
+>     // renders comments from local state
+>     return <Feedback key={feedback.id} {...feedback} />;
+>   })}
+> );
 > };
->
+> 
 > export default SiteFeedback;
 > ```
 
@@ -2316,69 +2351,71 @@ We're re-using our dashboard shell component here, and will need to modify it to
 
 > ```jsx
 > // components/dashboard-shell.js
->
+> 
 > import { useAuth } from '@/lib/auth';
->
+> 
 > const DashboardShell = ({ children }) => {
->   const { user, signout } = useAuth();
->
->   return (
->     <Box backgroundColor="gray.100" h="100vh">
->       <Flex backgroundColor="white" mb={16} w="full">
->         <Flex
->           alignItems="center"
->           justifyContent="space-between"
->           pt={4}
->           pb={4}
->           maxW="1250px"
->           margin="0 auto"
->           w="full"
->           px={8}
->           h="70px"
->         >
->           <Flex align="center">
->             <NextLink href="/" passHref>
->               <Link>
->                 <LogoIcon name="logo" boxSize={8} mr={8} />
->               </Link>
->             </NextLink>
->
->             {/* ❌ <Link mr={4}>Sites</Link>
->             <Link>Feedback</Link> */}
->
->             <NextLink href="/dashboard" passHref>
->               <Link mr={4}>Sites</Link>
->             </NextLink>
->             <NextLink href="/feedback" passHref>
->               <Link>Feedback</Link>
->             </NextLink>
->           </Flex>
->           <Flex justifyContent="center" alignItems="center">
->             {user && (
->               <Button variant="ghost" mr={2} onClick={() => signout()}>
->                 Log Out
->               </Button>
->             )}
->             <Avatar size="sm" src={user?.photoUrl} />
->           </Flex>
->         </Flex>
->       </Flex>
->       <Flex margin="0 auto" direction="column" maxW="1250px" px={8}>
->         {/* ❌ <Breadcrumb>
->           <BreadcrumbItem>
->             <BreadcrumbLink>Sites</BreadcrumbLink>
->           </BreadcrumbItem>
->         </Breadcrumb>
->         <Flex justifyContent="space-between">
->           <Heading mb={8}>My Sites</Heading>
->           <AddSiteModal>+ Add Site</AddSiteModal>
->         </Flex> */}
->         {children}
->       </Flex>
->     </Box>
->   );
+> const { user, signout } = useAuth();
+> 
+> return (
+>  <Box backgroundColor="gray.100" h="100vh">
+>    <Flex backgroundColor="white" mb={16} w="full">
+>      <Flex
+>        alignItems="center"
+>        justifyContent="space-between"
+>        pt={4}
+>        pb={4}
+>        maxW="1250px"
+>        margin="0 auto"
+>        w="full"
+>        px={8}
+>        h="70px"
+>      >
+>        <Flex align="center">
+>          <NextLink href="/" passHref>
+>            <Link>
+>              <LogoIcon name="logo" boxSize={8} mr={8} />
+>            </Link>
+>          </NextLink>
+> 
+>          {/* ❌ <Link mr={4}>Sites</Link>
+>          <Link>Feedback</Link> */}
+> 
+>          <NextLink href="/dashboard" passHref>
+>            <Link mr={4}>Sites</Link>
+>          </NextLink>
+>          <NextLink href="/feedback" passHref>
+>            <Link>Feedback</Link>
+>          </NextLink>
+>        </Flex>
+>        <Flex justifyContent="center" alignItems="center">
+>          {user && (
+>            <NextLink href="/account" passHref>
+>              <Button as="a" variant="ghost" mr={2}>
+>                Account
+>              </Button>
+>            </NextLink>
+>          )}
+>          <Avatar size="sm" src={user?.photoUrl} />
+>        </Flex>
+>      </Flex>
+>    </Flex>
+>    <Flex margin="0 auto" direction="column" maxW="1250px" px={8}>
+>      {/* ❌ <Breadcrumb>
+>        <BreadcrumbItem>
+>          <BreadcrumbLink>Sites</BreadcrumbLink>
+>        </BreadcrumbItem>
+>      </Breadcrumb>
+>      <Flex justifyContent="space-between">
+>        <Heading mb={8}>My Sites</Heading>
+>        <AddSiteModal>+ Add Site</AddSiteModal>
+>      </Flex> */}
+>      {children}
+>    </Flex>
+>  </Box>
+> );
 > };
->
+> 
 > export default DashboardShell;
 > ```
 >
@@ -2386,26 +2423,26 @@ We're re-using our dashboard shell component here, and will need to modify it to
 >
 > ```jsx
 > // components/site-table-header.js
->
+> 
 > import React from 'react';
 > import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, Heading, Flex } from '@chakra-ui/react';
->
+> 
 > const SiteTableHeader = () => {
->   return (
->     <>
->       <Breadcrumb>
->         <BreadcrumbItem>
->           <BreadcrumbLink>Sites</BreadcrumbLink>
->         </BreadcrumbItem>
->       </Breadcrumb>
->       <Flex justifyContent="space-between">
->         <Heading mb={8}>My Sites</Heading>
->         <AddSiteModal>+ Add Site</AddSiteModal>
->       </Flex>
->     </>
->   );
+> return (
+>  <>
+>    <Breadcrumb>
+>      <BreadcrumbItem>
+>        <BreadcrumbLink>Sites</BreadcrumbLink>
+>      </BreadcrumbItem>
+>    </Breadcrumb>
+>    <Flex justifyContent="space-between">
+>      <Heading mb={8}>My Sites</Heading>
+>      <AddSiteModal>+ Add Site</AddSiteModal>
+>    </Flex>
+>  </>
+> );
 > };
->
+> 
 > export default SiteTableHeader;
 > ```
 >
@@ -2413,56 +2450,58 @@ We're re-using our dashboard shell component here, and will need to modify it to
 >
 > ```jsx
 > // pages/dashboard.js
->
+> 
 > import SiteTableHeader from '../components/site-table-header';
->
+> 
 > const Dashboard = () => {
->   /*...*/
->
->   if (!data) {
->     <DashboardShell>
->       <SiteTableHeader /> {/* add extracted table-header */}
->       <SiteTableSkeleton />
->     </DashboardShell>;
->   }
->
->   return (
->     <DashboardShell>
->       <SiteTableHeader /> {/* add extracted table-header */}
->       {data?.sites ? <SiteTable sites={data.sites} /> : <EmptyState />}
->     </DashboardShell>
->   );
+> /*...*/
+> 
+> if (!data) {
+>  <DashboardShell>
+>    <SiteTableHeader /> {/* add extracted table-header */}
+>    <SiteTableSkeleton />
+>  </DashboardShell>;
+> }
+> 
+> return (
+>  <DashboardShell>
+>    <SiteTableHeader /> {/* add extracted table-header */}
+>    {data?.sites ? <SiteTable sites={data.sites} /> : <EmptyState />}
+>  </DashboardShell>
+> );
 > };
 > ```
 >
 > While we're refactoring we'll also went to make a small asthetic change to our site-table component where we render the feedback link, just to make it more pronounced as a link:
 >
 > ```jsx
+> // components/site-table.js
+> 
 > const SiteTable = ({ sites }) => {
->   return (
->     <Table>
->       {/*...*/}
->
->       <tbody>
->         {sites.map((site) => (
->           <Box as="tr" key={site.url}>
->             {/*...*/}
->
->             <Td>
->               <NextLink href="/p/[siteId]" as={`/p/${site.id}`} passHref>
->                 {/* ❌ <Link>View Feedback</Link> */}
->                 <Link color="blue.500" fontWeight="medium">
->                   View Feedback
->                 </Link>
->               </NextLink>
->             </Td>
->
->             {/*...*/}
->           </Box>
->         ))}
->       </tbody>
->     </Table>
->   );
+> return (
+>  <Table>
+>    {/*...*/}
+> 
+>    <tbody>
+>      {sites.map((site) => (
+>        <Box as="tr" key={site.url}>
+>          {/*...*/}
+> 
+>          <Td>
+>            <NextLink href="/p/[siteId]" as={`/p/${site.id}`} passHref>
+>              {/* ❌ <Link>View Feedback</Link> */}
+>              <Link color="blue.500" fontWeight="medium">
+>                View Feedback
+>              </Link>
+>            </NextLink>
+>          </Td>
+> 
+>          {/*...*/}
+>        </Box>
+>      ))}
+>    </tbody>
+>  </Table>
+> );
 > };
 > ```
 
@@ -2930,7 +2969,7 @@ const onCreateSite = ({ name, url }) => {
 
     async (data) =>
       // take the cached sites and manually update with newSite and add siteId
-      ({ sites: [...data.sites, { id, ...newSite }] }),
+      ({ sites: [{ id, ...newSite }, ...data.sites] }),
 
     false
   );
@@ -3214,3 +3253,72 @@ export default async (req, res) => {
   }
 };
 ```
+
+
+
+### Render Initial Feedback for App on Index Page
+
+```js
+// pages/index.js
+
+const SITE_ID = 'chjoZ7fFAzZJ9YEM1dGu';
+
+export async function getStaticProps(context) {
+  const { feedback } = await getAllFeedback(SITE_ID);
+
+  return {
+    props: {
+      allFeedback: feedback,
+    },
+    revalidate: 1,
+  };
+}
+```
+
+> Will now fetch feedback for our app and display that as an example to visitors of how the app can function for their needs. 
+
+
+
+```jsx
+// pages/index.js
+
+import {  Box } from '@chakra-ui/react';
+
+// ❌const Home = () => {
+const Home = ({allFeedback}) => {
+
+	/*...*/
+
+  return (
+    <>
+      <Box bg="gray.100" py={16}> 
+         {/*...*/}
+
+
+      </Box>
+      <Box
+        display="flex"
+        flexDirection="column"
+        width="full"
+        maxWidth="700px"
+        margin="0 auto"
+        mt={8}
+      >
+        <FeedbackLink siteId={SITE_ID} />
+        {allFeedback.map((feedback) => (
+          <Feedback key={feedback.id} {...feedback} />
+        ))}
+      </Box>
+		</>
+  )
+}
+```
+
+> This allows us to display feedback on the homepage as an example of how they can use the fast feedback service on their own site.
+
+
+
+![image-20201227151823644](https://cdn.jsdelivr.net/gh/gaurangrshah/_shots@master/scrnshots/image-20201227151823644.png)
+
+
+
